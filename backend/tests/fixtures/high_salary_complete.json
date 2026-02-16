@@ -1,0 +1,60 @@
+{
+  "employer": {"name": "פיננסים גלובל בע\"מ", "id": "518000000", "address": "מגדל אלון, תל אביב"},
+  "employee": {"name": "דוד כהן", "id": "056789012", "job_title": "סמנכ\"ל כספים"},
+  "period": {"month": 1, "year": 2026},
+  "payment_date": "2026-02-09",
+  "employment": {
+    "salary_type": "monthly",
+    "base_rate": 45000.0,
+    "job_percent": 100.0,
+    "hours_regular": 182.0,
+    "hours_overtime_125": 0.0,
+    "hours_overtime_150": 0.0,
+    "weekend_hours": null,
+    "holiday_hours": null
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר יסוד", "qty": 1, "rate": 45000.0, "amount": 45000.0},
+    {"label": "travel_allowance", "label_he": "החזר נסיעות", "qty": 22, "rate": 22.6, "amount": 497.2},
+    {"label": "car_allowance", "label_he": "שווי רכב", "amount": 2830.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 11500.00},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 1850.00},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 1250.00},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 2700.00},
+    {"label": "training_fund_employee", "label_he": "קרן השתלמות עובד", "amount": 1125.00}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 2925.00},
+    {"label": "severance_employer", "label_he": "פיצויים מעביד", "amount": 2700.00},
+    {"label": "training_fund_employer", "label_he": "קרן השתלמות מעביד", "amount": 3375.00}
+  ],
+  "pension": {
+    "employee_tagmulim": 2700.00,
+    "employer_tagmulim": 2925.00,
+    "employer_pitzuyim": 2700.00,
+    "training_fund_employee": 1125.00,
+    "training_fund_employer": 3375.00
+  },
+  "leave": {
+    "vacation_open": 22.0,
+    "vacation_accrued": 2.17,
+    "vacation_used": 0.0,
+    "vacation_close": 24.17,
+    "sick_open": 45.0,
+    "sick_accrued": 1.5,
+    "sick_used": 0.0,
+    "sick_close": 46.5
+  },
+  "totals": {
+    "gross": 48327.20,
+    "taxable_gross": 47830.00,
+    "net": 29902.20,
+    "total_deductions": 18425.00
+  },
+  "meta": {
+    "parse_warnings": [],
+    "needs_user_confirmation_fields": []
+  }
+}

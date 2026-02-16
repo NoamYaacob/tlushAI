@@ -1,0 +1,53 @@
+{
+  "employer": {"name": "מכולת השכונה", "id": "550000000", "address": "באר שבע"},
+  "employee": {"name": "מוחמד אבו חמד", "id": "034567890", "job_title": "קופאי"},
+  "period": {"month": 6, "year": 2025},
+  "payment_date": "2025-07-10",
+  "employment": {
+    "salary_type": "hourly",
+    "base_rate": 28.0,
+    "job_percent": null,
+    "hours_regular": 170.0,
+    "hours_overtime_125": 0.0,
+    "hours_overtime_150": 0.0,
+    "weekend_hours": 0.0,
+    "holiday_hours": 0.0
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר שעתי", "qty": 170, "rate": 28.0, "amount": 4760.0},
+    {"label": "travel_allowance", "label_he": "דמי נסיעות", "qty": 20, "rate": 10.0, "amount": 200.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 0.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 16.00},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 15.00}
+  ],
+  "employer_contrib_lines": [],
+  "pension": {
+    "employee_tagmulim": null,
+    "employer_tagmulim": null,
+    "employer_pitzuyim": null,
+    "training_fund_employee": null,
+    "training_fund_employer": null
+  },
+  "leave": {
+    "vacation_open": 0.0,
+    "vacation_accrued": 0.83,
+    "vacation_used": 0.0,
+    "vacation_close": 0.83,
+    "sick_open": 0.0,
+    "sick_accrued": 1.5,
+    "sick_used": 0.0,
+    "sick_close": 1.5
+  },
+  "totals": {
+    "gross": 4960.0,
+    "taxable_gross": 4760.0,
+    "net": 4929.00,
+    "total_deductions": 31.00
+  },
+  "meta": {
+    "parse_warnings": ["Income tax is 0 — may be exempt due to low income or tax credits"],
+    "needs_user_confirmation_fields": ["employment.base_rate"]
+  }
+}

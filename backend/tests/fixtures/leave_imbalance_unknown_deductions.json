@@ -1,0 +1,63 @@
+{
+  "employer": {"name": "שירותי ניקיון נקי בע\"מ", "id": "540000000", "address": "חיפה"},
+  "employee": {"name": "רחל גולדשטיין", "id": "045678901", "job_title": "מנהלת אזור"},
+  "period": {"month": 11, "year": 2025},
+  "payment_date": "2025-12-09",
+  "employment": {
+    "salary_type": "monthly",
+    "base_rate": 12000.0,
+    "job_percent": 100.0,
+    "hours_regular": 182.0,
+    "hours_overtime_125": 0.0,
+    "hours_overtime_150": 0.0,
+    "weekend_hours": null,
+    "holiday_hours": null
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר יסוד", "qty": 1, "rate": 12000.0, "amount": 12000.0},
+    {"label": "travel_allowance", "label_he": "החזר נסיעות", "qty": 22, "rate": 20.0, "amount": 440.0},
+    {"label": "recuperation", "label_he": "דמי הבראה", "amount": 418.0},
+    {"label": "expense_car", "label_he": "החזר הוצאות רכב", "amount": 3000.0},
+    {"label": "expense_phone", "label_he": "החזר הוצאות טלפון", "amount": 250.0},
+    {"label": "expense_meals", "label_he": "אש\"ל", "amount": 1500.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1200.00},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 480.00},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 340.00},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 720.00},
+    {"label": "mystery_deduction", "label_he": "ניכוי מיוחד", "amount": 350.00},
+    {"label": "mystery_deduction", "label_he": "ניכוי מיוחד", "amount": 200.00}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 780.00},
+    {"label": "severance_employer", "label_he": "פיצויים מעביד", "amount": 720.00}
+  ],
+  "pension": {
+    "employee_tagmulim": 720.00,
+    "employer_tagmulim": 780.00,
+    "employer_pitzuyim": 720.00,
+    "training_fund_employee": null,
+    "training_fund_employer": null
+  },
+  "leave": {
+    "vacation_open": 8.0,
+    "vacation_accrued": 1.0,
+    "vacation_used": 2.0,
+    "vacation_close": 5.0,
+    "sick_open": 12.0,
+    "sick_accrued": 1.5,
+    "sick_used": 3.0,
+    "sick_close": 10.5
+  },
+  "totals": {
+    "gross": 17608.0,
+    "taxable_gross": 13418.0,
+    "net": 14318.00,
+    "total_deductions": 3290.00
+  },
+  "meta": {
+    "parse_warnings": ["Unknown deduction label: mystery_deduction"],
+    "needs_user_confirmation_fields": ["deductions_lines"]
+  }
+}

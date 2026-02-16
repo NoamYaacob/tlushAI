@@ -1,0 +1,60 @@
+{
+  "employer": {"name": "טכנולוגיות אלפא בע\"מ", "id": "513000000", "address": "הרצליה פיתוח"},
+  "employee": {"name": "אבי לוי", "id": "023456789", "job_title": "מהנדס תוכנה בכיר"},
+  "period": {"month": 3, "year": 2026},
+  "payment_date": "2026-04-09",
+  "employment": {
+    "salary_type": "monthly",
+    "base_rate": 22000.0,
+    "job_percent": 100.0,
+    "hours_regular": 182.0,
+    "hours_overtime_125": 15.0,
+    "hours_overtime_150": 8.0,
+    "weekend_hours": null,
+    "holiday_hours": null
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר יסוד", "qty": 1, "rate": 22000.0, "amount": 22000.0},
+    {"label": "overtime_125", "label_he": "שעות נוספות 125%", "qty": 15, "rate": 150.96, "amount": 2264.42},
+    {"label": "overtime_150", "label_he": "שעות נוספות 150%", "qty": 8, "rate": 181.15, "amount": 1449.21}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 4200.00},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 920.00},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 650.00},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 1320.00},
+    {"label": "training_fund_employee", "label_he": "קרן השתלמות עובד", "amount": 550.00}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 1430.00},
+    {"label": "severance_employer", "label_he": "פיצויים מעביד", "amount": 1320.00},
+    {"label": "training_fund_employer", "label_he": "קרן השתלמות מעביד", "amount": 1650.00}
+  ],
+  "pension": {
+    "employee_tagmulim": 1320.00,
+    "employer_tagmulim": 1430.00,
+    "employer_pitzuyim": 1320.00,
+    "training_fund_employee": 550.00,
+    "training_fund_employer": 1650.00
+  },
+  "leave": {
+    "vacation_open": 15.0,
+    "vacation_accrued": 1.67,
+    "vacation_used": 3.0,
+    "vacation_close": 13.67,
+    "sick_open": 30.0,
+    "sick_accrued": 1.5,
+    "sick_used": 1.0,
+    "sick_close": 30.5
+  },
+  "totals": {
+    "gross": 25713.63,
+    "taxable_gross": 25713.63,
+    "net": 18073.63,
+    "total_deductions": 7640.00
+  },
+  "meta": {
+    "parse_warnings": [],
+    "needs_user_confirmation_fields": []
+  }
+}
