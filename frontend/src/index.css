@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+@theme {
+  --color-severity-high: #dc2626;
+  --color-severity-warn: #f59e0b;
+  --color-severity-info: #2563eb;
+  --color-severity-ok: #16a34a;
+  --font-family-sans: "Rubik", sans-serif;
+}
+
+body {
+  font-family: var(--font-family-sans);
+  background-color: #f8fafc;
+  color: #1e293b;
+  min-height: 100vh;
+}
+
+/* Severity badge styles */
+.badge-high {
+  background-color: #fef2f2;
+  border-color: #dc2626;
+  color: #991b1b;
+}
+
+.badge-warn {
+  background-color: #fffbeb;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.badge-info {
+  background-color: #eff6ff;
+  border-color: #2563eb;
+  color: #1e40af;
+}
+
+.badge-ok {
+  background-color: #f0fdf4;
+  border-color: #16a34a;
+  color: #166534;
+}
