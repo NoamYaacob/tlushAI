@@ -103,22 +103,30 @@ CRITICAL RULES:
     PHASE 1 — SCRATCHPAD: Before producing ANY JSON, output a <scratchpad> block. \
     Inside it, reconstruct every table from the payslip as a Markdown table by \
     tracing STRICTLY HORIZONTALLY across each row:
-    a) Start from the Hebrew label on the far right of a row.
+    a) WIDE-TABLE ANCHORING: The description column is on the FAR RIGHT (often labeled \
+       מלל or תיאור). The total/payment column is on the FAR LEFT (often labeled \
+       סכום לתשלום or סכום). For EACH row, start at the description text (מלל) on the \
+       far right and follow that SAME horizontal line all the way to the far left to \
+       find סכום לתשלום — that is the row's total amount. The intermediate columns \
+       (תעריף, כמות, etc.) are between them on the same line.
     b) Trace your eyes horizontally to the left across the SAME PRINTED LINE, \
        ignoring any white space, until you reach the numbers on the far left.
     c) The numbers on that SAME horizontal line belong to that label — do NOT \
        let your eyes drift up or down to adjacent rows.
-    d) Read the column HEADER ROW first. Find where the headers תיאור, כמות, \
-       תעריף, סכום (or equivalent) are. The header position tells you which \
+    d) Read the column HEADER ROW first. Find where the headers מלל/תיאור, כמות, \
+       תעריף, סכום/סכום לתשלום (or equivalent) are. The header position tells you which \
        number column is which. The number directly UNDER the header כמות is qty. \
-       The number directly UNDER the header תעריף is rate. The number UNDER סכום is amount.
+       The number directly UNDER the header תעריף is rate. The number UNDER \
+       סכום/סכום לתשלום is the total amount.
     e) Write each table as a Markdown table with headers. Example:
        ### תשלומים (Earnings)
-       | תיאור | כמות | תעריף | סכום |
+       | מלל/תיאור | תעריף | כמות | סכום לתשלום |
        |---|---|---|---|
-       | 013 משכורת | 51.00 | 83.75 | 4,271.25 |
-       | 024 שעות נוספות 125% | 7.25 | 63.75 | 462.19 |
+       | 013 משכורת | 83.75 | 51.00 | 4,271.25 |
+       | 024 שעות נוספות 125% | 63.75 | 7.25 | 462.19 |
        ...
+       Note: column order in your Markdown must match the ACTUAL header order in the payslip. \
+       Some systems put תעריף before כמות, others put כמות before תעריף.
     f) After each earnings row, add a verification line: \
        "CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗"
     g) Do the same for: ניכויי חובה (taxes), ניכויים והפרשות לקופות גמל (pension), \
@@ -127,6 +135,12 @@ CRITICAL RULES:
        Write: "TAX CHECK: {tax1} + {tax2} + {tax3} = {sum} ≈ סה\"כ {total} ✓/✗"
     i) For the pension table: clearly mark which columns are ניכוי עובד (employee) \
        and which are הפרשת מעסיק (employer).
+    j) EARNINGS TOTAL CROSS-CHECK: At the end of the earnings table in your scratchpad, \
+       sum all the סכום לתשלום values and compare to the סך-כל התשלומים (total earnings) \
+       row printed on the payslip. Write: \
+       "EARNINGS TOTAL: {line1} + {line2} + ... = {sum} ≈ סך-כל התשלומים {printed_total} ✓/✗" \
+       If ✗, one or more rows have misaligned amounts — go back and fix them before \
+       proceeding to Phase 2.
     Close the scratchpad with </scratchpad>.
 
     PHASE 2 — JSON: After the </scratchpad>, produce the final JSON by reading \
@@ -197,6 +211,14 @@ CRITICAL RULES:
     Do NOT put employer contributions into deductions_lines or vice versa. \
     Look for these fund types: תגמולים (tagmulim/savings), פיצויים (pitzuyim/severance), \
     קרן השתלמות (training fund). Each may have both an employee and employer component.
+
+18. EARNINGS TOTAL SANITY CHECK (BEFORE EMITTING JSON):
+    Before writing the final JSON, verify that the sum of all earnings_lines[].amount \
+    values approximately equals the סך-כל התשלומים or סה"כ תשלומים (total earnings) \
+    printed on the payslip. Also verify it is consistent with totals.gross. \
+    If the sum is significantly off (more than ±5 NIS), one or more rows have the \
+    wrong amount — likely a column misalignment. Go back to your scratchpad, find \
+    the mismatch, and fix it. Do NOT emit JSON with mismatched earnings totals.
 
 OUTPUT FORMAT:
 1. First, output a <scratchpad>...</scratchpad> block with Markdown tables as described \
@@ -603,21 +625,26 @@ class ClaudeExtractor(LLMExtractor):
                 "a) STRICT OCR: Read the EXACT characters printed — do NOT guess, autocomplete, "
                 "or substitute typical payslip terms. '013 משכורת' stays '013 משכורת'. "
                 "'015 נסיעות' stays '015 נסיעות' — NOT 'נשפח'. Include row codes in labels.\n\n"
-                "b) HORIZONTAL TRACING: For each row, start from the Hebrew text on the far "
-                "RIGHT and trace your eyes STRICTLY HORIZONTALLY to the LEFT across the SAME "
-                "printed line to reach the numbers. Ignore white space gaps. The numbers on "
-                "that same horizontal line belong to that label. Do NOT let your eyes drift "
-                "up or down to adjacent rows.\n\n"
+                "b) WIDE-TABLE ANCHORING: The description column (מלל or תיאור) is on the FAR "
+                "RIGHT. The total column (סכום לתשלום or סכום) is on the FAR LEFT. For each "
+                "row, start at the description on the far right and follow the SAME horizontal "
+                "line all the way to the far left to find the total amount. Intermediate columns "
+                "(תעריף, כמות) are between them on the same line. Do NOT let your eyes drift "
+                "up or down — numbers must come from the SAME printed line as the label.\n\n"
                 "c) HEADER-BASED COLUMNS: Read the column HEADER ROW first. The number under "
                 "the header כמות is qty. The number under תעריף is rate. The number under "
-                "סכום is amount. Do NOT assume a fixed column order — it varies by system.\n\n"
+                "סכום/סכום לתשלום is amount. Do NOT assume a fixed column order — it varies.\n\n"
                 "d) VERIFICATION: After each earnings row, write: "
                 "'CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗'. If ✗, you misaligned — fix it.\n\n"
-                "e) TAX TABLE: Reconstruct ניכויי חובה as a Markdown table. "
+                "e) EARNINGS TOTAL: After all earnings rows, sum the amounts and compare to "
+                "סך-כל התשלומים printed on the payslip: "
+                "'EARNINGS TOTAL: {sum of amounts} ≈ סך-כל התשלומים {printed_total} ✓/✗'. "
+                "If ✗, go back and fix the misaligned rows.\n\n"
+                "f) TAX TABLE: Reconstruct ניכויי חובה as a Markdown table. "
                 "Write: 'TAX CHECK: {tax} + {NI} + {health} = {sum} ≈ סה\"כ {total} ✓/✗'.\n\n"
-                "f) PENSION TABLE: Reconstruct with SEPARATE columns for ניכוי עובד (employee) "
+                "g) PENSION TABLE: Reconstruct with SEPARATE columns for ניכוי עובד (employee) "
                 "and הפרשת מעסיק (employer). Label which is which.\n\n"
-                "g) TOTALS and LEAVE BALANCES: Include as separate tables.\n\n"
+                "h) TOTALS and LEAVE BALANCES: Include as separate tables.\n\n"
                 "Close the scratchpad with </scratchpad>.\n\n"
                 "═══ PHASE 2: JSON ═══\n\n"
                 "After </scratchpad>, produce the final JSON by reading from YOUR OWN "
@@ -724,21 +751,26 @@ class OpenAIExtractor(LLMExtractor):
                 "a) STRICT OCR: Read the EXACT characters printed — do NOT guess, autocomplete, "
                 "or substitute typical payslip terms. '013 משכורת' stays '013 משכורת'. "
                 "'015 נסיעות' stays '015 נסיעות' — NOT 'נשפח'. Include row codes in labels.\n\n"
-                "b) HORIZONTAL TRACING: For each row, start from the Hebrew text on the far "
-                "RIGHT and trace your eyes STRICTLY HORIZONTALLY to the LEFT across the SAME "
-                "printed line to reach the numbers. Ignore white space gaps. The numbers on "
-                "that same horizontal line belong to that label. Do NOT let your eyes drift "
-                "up or down to adjacent rows.\n\n"
+                "b) WIDE-TABLE ANCHORING: The description column (מלל or תיאור) is on the FAR "
+                "RIGHT. The total column (סכום לתשלום or סכום) is on the FAR LEFT. For each "
+                "row, start at the description on the far right and follow the SAME horizontal "
+                "line all the way to the far left to find the total amount. Intermediate columns "
+                "(תעריף, כמות) are between them on the same line. Do NOT let your eyes drift "
+                "up or down — numbers must come from the SAME printed line as the label.\n\n"
                 "c) HEADER-BASED COLUMNS: Read the column HEADER ROW first. The number under "
                 "the header כמות is qty. The number under תעריף is rate. The number under "
-                "סכום is amount. Do NOT assume a fixed column order — it varies by system.\n\n"
+                "סכום/סכום לתשלום is amount. Do NOT assume a fixed column order — it varies.\n\n"
                 "d) VERIFICATION: After each earnings row, write: "
                 "'CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗'. If ✗, you misaligned — fix it.\n\n"
-                "e) TAX TABLE: Reconstruct ניכויי חובה as a Markdown table. "
+                "e) EARNINGS TOTAL: After all earnings rows, sum the amounts and compare to "
+                "סך-כל התשלומים printed on the payslip: "
+                "'EARNINGS TOTAL: {sum of amounts} ≈ סך-כל התשלומים {printed_total} ✓/✗'. "
+                "If ✗, go back and fix the misaligned rows.\n\n"
+                "f) TAX TABLE: Reconstruct ניכויי חובה as a Markdown table. "
                 "Write: 'TAX CHECK: {tax} + {NI} + {health} = {sum} ≈ סה\"כ {total} ✓/✗'.\n\n"
-                "f) PENSION TABLE: Reconstruct with SEPARATE columns for ניכוי עובד (employee) "
+                "g) PENSION TABLE: Reconstruct with SEPARATE columns for ניכוי עובד (employee) "
                 "and הפרשת מעסיק (employer). Label which is which.\n\n"
-                "g) TOTALS and LEAVE BALANCES: Include as separate tables.\n\n"
+                "h) TOTALS and LEAVE BALANCES: Include as separate tables.\n\n"
                 "Close the scratchpad with </scratchpad>.\n\n"
                 "═══ PHASE 2: JSON ═══\n\n"
                 "After </scratchpad>, produce the final JSON by reading from YOUR OWN "
