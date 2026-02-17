@@ -633,7 +633,7 @@ class ClaudeExtractor(LLMExtractor):
 
         messages_content.append({"type": "text", "text": text_prompt})
 
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -754,7 +754,7 @@ class OpenAIExtractor(LLMExtractor):
 
         messages_content.append({"type": "text", "text": text_prompt})
 
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
