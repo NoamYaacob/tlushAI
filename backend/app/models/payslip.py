@@ -156,6 +156,8 @@ class OkItem(BaseModel):
 class LineExplanation(BaseModel):
     label: str
     amount: float
+    qty: Optional[float] = None
+    rate: Optional[float] = None
     category: LineCategory
     meaning_he: str
     affects_gross: Optional[bool] = None

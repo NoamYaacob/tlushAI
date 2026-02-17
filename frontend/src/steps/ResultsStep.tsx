@@ -138,54 +138,75 @@ export function ResultsStep() {
       )}
 
       {/* Line explanations */}
-      {result.line_explanations.length > 0 && (
-        <section>
-          <h2 className="mb-3 text-lg font-semibold text-gray-800">
-            פירוט שורות
-          </h2>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-gray-600">
-                  <th className="p-3 text-start font-medium">שורה</th>
-                  <th className="p-3 text-start font-medium">סכום</th>
-                  <th className="p-3 text-start font-medium">קטגוריה</th>
-                  <th className="p-3 text-start font-medium">הסבר</th>
-                  <th className="p-3 text-start font-medium">סטטוס</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.line_explanations.map((line, i) => (
-                  <tr
-                    key={i}
-                    className={`border-b border-gray-100 ${
-                      line.status === "warn"
-                        ? "bg-red-50"
-                        : line.status === "check"
-                          ? "bg-amber-50"
-                          : ""
-                    }`}
-                  >
-                    <td className="p-3 font-medium text-gray-800">{line.label}</td>
-                    <td className="p-3 text-gray-700">{formatNIS(line.amount)}</td>
-                    <td className="p-3 text-gray-600">
-                      {CATEGORY_LABELS[line.category] ?? line.category}
-                    </td>
-                    <td className="p-3 text-gray-600">{line.meaning_he}</td>
-                    <td className="p-3">
-                      <span
-                        className={`inline-block h-2.5 w-2.5 rounded-full ${
-                          STATUS_DOT[line.status] ?? "bg-gray-400"
-                        }`}
-                      />
-                    </td>
+      {result.line_explanations.length > 0 && (() => {
+        const hasQtyRate = result.line_explanations.some(
+          (l) => l.qty != null || l.rate != null
+        );
+        return (
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-gray-800">
+              פירוט שורות
+            </h2>
+            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-600">
+                    <th className="p-3 text-start font-medium">שורה</th>
+                    {hasQtyRate && (
+                      <>
+                        <th className="p-3 text-start font-medium">כמות/שעות</th>
+                        <th className="p-3 text-start font-medium">תעריף</th>
+                      </>
+                    )}
+                    <th className="p-3 text-start font-medium">סכום</th>
+                    <th className="p-3 text-start font-medium">קטגוריה</th>
+                    <th className="p-3 text-start font-medium">הסבר</th>
+                    <th className="p-3 text-start font-medium">סטטוס</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+                </thead>
+                <tbody>
+                  {result.line_explanations.map((line, i) => (
+                    <tr
+                      key={i}
+                      className={`border-b border-gray-100 ${
+                        line.status === "warn"
+                          ? "bg-red-50"
+                          : line.status === "check"
+                            ? "bg-amber-50"
+                            : ""
+                      }`}
+                    >
+                      <td className="p-3 font-medium text-gray-800">{line.label}</td>
+                      {hasQtyRate && (
+                        <>
+                          <td className="p-3 text-gray-700">
+                            {line.qty != null ? line.qty.toLocaleString("he-IL") : "—"}
+                          </td>
+                          <td className="p-3 text-gray-700">
+                            {line.rate != null ? formatNIS(line.rate) : "—"}
+                          </td>
+                        </>
+                      )}
+                      <td className="p-3 text-gray-700">{formatNIS(line.amount)}</td>
+                      <td className="p-3 text-gray-600">
+                        {CATEGORY_LABELS[line.category] ?? line.category}
+                      </td>
+                      <td className="p-3 text-gray-600">{line.meaning_he}</td>
+                      <td className="p-3">
+                        <span
+                          className={`inline-block h-2.5 w-2.5 rounded-full ${
+                            STATUS_DOT[line.status] ?? "bg-gray-400"
+                          }`}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Disclaimer */}
       <section className="rounded-xl border border-gray-300 bg-gray-100 p-4">

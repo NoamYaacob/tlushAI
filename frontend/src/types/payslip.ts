@@ -128,6 +128,8 @@ export interface OkItem {
 export interface LineExplanation {
   label: string;
   amount: number;
+  qty?: number | null;
+  rate?: number | null;
   category: LineCategory;
   meaning_he: string;
   affects_gross?: boolean | null;

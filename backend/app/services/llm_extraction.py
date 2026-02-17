@@ -95,6 +95,42 @@ CRITICAL RULES:
     label, and table cell in the image. Images are the primary source — they contain \
     the actual payslip with Hebrew tables, numbers, and layout.
 
+12. EARNINGS TABLE — ROW-BY-ROW EXTRACTION (CRITICAL):
+    Israeli payslips have an earnings table (תשלומים) with columns typically named:
+    - תיאור (description) — the Hebrew label for the line item
+    - כמות / ימים / שעות (quantity / days / hours)
+    - תעריף / ערך (rate / value per unit)
+    - סכום / סה"כ (total amount)
+    You MUST extract EVERY row from this table as a separate earnings_line entry.
+    For each row:
+    a) Copy the EXACT Hebrew description into label_he (do NOT translate, guess, or summarize).
+    b) Map it to a standard English label if you recognize it; otherwise use a descriptive \
+       English slug (e.g., "shift_bonus", "seniority", "clothing_allowance").
+    c) Put the quantity column value (hours, days, units) into "qty".
+    d) Put the rate column value (per-hour, per-day, per-unit) into "rate".
+    e) Put the total amount column value into "amount".
+    f) If "qty" or "rate" is blank or missing for a row, set them to null — but still \
+       extract the description and amount.
+    DO NOT combine multiple rows into one. DO NOT invent rows that don't exist. \
+    DO NOT put a non-monetary value (like "12 days") into the "amount" field — \
+    days/hours go into "qty", monetary totals go into "amount".
+
+13. HOURLY PAYSLIPS WITH MULTIPLE RATE TIERS:
+    Hourly payslips often show multiple rows at different rates (100%, 125%, 150%, 175%, 200%).
+    - Set employment.base_rate to the BASE hourly rate (the 100% rate).
+    - Each rate tier should be its own earnings_line with the correct qty (hours), \
+      rate (effective hourly rate at that tier), and amount (total for that tier).
+    - Example: if the payslip shows "שעות רגילות 100% | 120 | 35.00 | 4,200.00" \
+      and "שעות נוספות 125% | 20 | 43.75 | 875.00", create two separate lines.
+    - The employment.base_rate should be 35.00 (the 100% rate).
+    - Set employment.hours_regular from the 100% row quantity; hours_overtime_125 \
+      from the 125% row quantity; hours_overtime_150 from the 150% row quantity.
+
+14. HEBREW TEXT ACCURACY: Copy Hebrew labels exactly as printed on the payslip. \
+    Do NOT hallucinate or guess Hebrew words. If a word is unclear, copy the closest \
+    readable characters and add a warning to meta.parse_warnings. Never invent \
+    Hebrew text that is not visible in the source.
+
 OUTPUT: Return ONLY valid JSON matching the schema. No markdown, no explanation.\
 """
 
@@ -212,30 +248,34 @@ Output:
   "meta": {"parse_warnings": [], "needs_user_confirmation_fields": []}
 }
 
-EXAMPLE 3 — Small business hourly worker:
+EXAMPLE 3 — Small business hourly worker (multiple rate tiers):
 Input snippet: "מסעדת הים בע\"מ | דוד אברהם | שעתי 42.00 ₪ | 11/2025 | \
-שכר רגיל 168 שעות 7,056 | שעות נוספות 125% 20 שעות 1,050 | \
-דמי הבראה 420 | ברוטו 8,526 | מס הכנסה 250 | ביטוח לאומי 340 | \
-מס בריאות 230 | נטו 7,706"
+תשלומים: \
+שכר רגיל 100% | 168 | 42.00 | 7,056.00 \
+שעות נוספות 125% | 20 | 52.50 | 1,050.00 \
+שעות נוספות 150% | 8 | 63.00 | 504.00 \
+דמי הבראה | | | 420.00 \
+ברוטו 9,030 | מס הכנסה 350 | ביטוח לאומי 380 | מס בריאות 260 | נטו 8,040"
 Output:
 {
   "employer": {"name": "מסעדת הים בע\\"מ", "id": null, "address": null},
   "employee": {"name": "דוד אברהם", "id": null, "job_title": null},
   "period": {"month": 11, "year": 2025},
-  "employment": {"salary_type": "hourly", "base_rate": 42.0, "job_percent": null, "hours_regular": 168.0, "hours_overtime_125": 20.0, "hours_overtime_150": null, "weekend_hours": null, "holiday_hours": null},
+  "employment": {"salary_type": "hourly", "base_rate": 42.0, "job_percent": null, "hours_regular": 168.0, "hours_overtime_125": 20.0, "hours_overtime_150": 8.0, "weekend_hours": null, "holiday_hours": null},
   "earnings_lines": [
-    {"label": "base_salary", "label_he": "שכר רגיל", "qty": 168, "rate": 42.0, "amount": 7056.0},
+    {"label": "base_salary", "label_he": "שכר רגיל 100%", "qty": 168, "rate": 42.0, "amount": 7056.0},
     {"label": "overtime_125", "label_he": "שעות נוספות 125%", "qty": 20, "rate": 52.5, "amount": 1050.0},
+    {"label": "overtime_150", "label_he": "שעות נוספות 150%", "qty": 8, "rate": 63.0, "amount": 504.0},
     {"label": "recuperation", "label_he": "דמי הבראה", "qty": null, "rate": null, "amount": 420.0}
   ],
   "deductions_lines": [
-    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 250.0},
-    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 340.0},
-    {"label": "health_tax", "label_he": "מס בריאות", "amount": 230.0}
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 350.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 380.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 260.0}
   ],
   "employer_contrib_lines": [],
   "pension": {"employee_tagmulim": null, "employer_tagmulim": null, "employer_pitzuyim": null, "training_fund_employee": null, "training_fund_employer": null},
-  "totals": {"gross": 8526.0, "taxable_gross": null, "net": 7706.0, "total_deductions": 820.0},
+  "totals": {"gross": 9030.0, "taxable_gross": null, "net": 8040.0, "total_deductions": 990.0},
   "meta": {"parse_warnings": [], "needs_user_confirmation_fields": ["pension_expected"]}
 }\
 """
@@ -484,8 +524,17 @@ class ClaudeExtractor(LLMExtractor):
             text_prompt = (
                 "The above image is a photograph of an Israeli payslip (תלוש שכר). "
                 "No OCR text is available — extract ALL data directly from the image. "
-                "Read every visible number, label, table cell, and Hebrew text in the image. "
                 "The image is your ONLY source of data.\n\n"
+                "CRITICAL INSTRUCTIONS FOR IMAGE EXTRACTION:\n"
+                "1. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW.\n"
+                "2. For each row, read the EXACT Hebrew description (תיאור), the quantity/hours "
+                "(כמות/שעות), the rate/tariff (תעריף), and the total amount (סכום).\n"
+                "3. Copy the Hebrew description EXACTLY as printed — do NOT guess or paraphrase.\n"
+                "4. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n"
+                "5. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
+                "SEPARATE earnings_line for each tier row. Set employment.base_rate to the 100% rate.\n"
+                "6. Do the same for the DEDUCTIONS TABLE (ניכויים) and EMPLOYER CONTRIBUTIONS.\n"
+                "7. Read totals (gross/net) from the summary row at the bottom.\n\n"
                 f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
             )
         else:
@@ -579,8 +628,17 @@ class OpenAIExtractor(LLMExtractor):
             text_prompt = (
                 "The above image is a photograph of an Israeli payslip (תלוש שכר). "
                 "No OCR text is available — extract ALL data directly from the image. "
-                "Read every visible number, label, table cell, and Hebrew text in the image. "
                 "The image is your ONLY source of data.\n\n"
+                "CRITICAL INSTRUCTIONS FOR IMAGE EXTRACTION:\n"
+                "1. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW.\n"
+                "2. For each row, read the EXACT Hebrew description (תיאור), the quantity/hours "
+                "(כמות/שעות), the rate/tariff (תעריף), and the total amount (סכום).\n"
+                "3. Copy the Hebrew description EXACTLY as printed — do NOT guess or paraphrase.\n"
+                "4. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n"
+                "5. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
+                "SEPARATE earnings_line for each tier row. Set employment.base_rate to the 100% rate.\n"
+                "6. Do the same for the DEDUCTIONS TABLE (ניכויים) and EMPLOYER CONTRIBUTIONS.\n"
+                "7. Read totals (gross/net) from the summary row at the bottom.\n\n"
                 f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
             )
         else:

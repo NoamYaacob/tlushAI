@@ -69,6 +69,8 @@ def _build_line_explanations(payslip: Payslip) -> list[LineExplanation]:
         explanations.append(LineExplanation(
             label=line.label_he or line.label,
             amount=line.amount,
+            qty=line.qty,
+            rate=line.rate,
             category=info[1] if info else LineCategory.earning,
             meaning_he=info[0] if info else "רכיב שכר — בדוק מול הסכם העבודה",
             affects_gross=info[2] if info else True,
