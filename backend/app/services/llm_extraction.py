@@ -95,21 +95,43 @@ CRITICAL RULES:
     label, and table cell in the image. Images are the primary source — they contain \
     the actual payslip with Hebrew tables, numbers, and layout.
 
-12. DYNAMIC HEADER-BASED COLUMN MAPPING (CRITICAL):
-    Israeli payslip tables have column headers — but their ORDER VARIES between payroll \
-    systems. Do NOT assume a fixed column order. Instead:
-    a) FIRST, read the column header row of each table. Look for headers like: \
-       תיאור (description), כמות (quantity), שעות (hours), ימים (days), \
-       תעריף (rate), ערך (value), סכום (amount/total), סה"כ (total).
-    b) Map each header to its semantic role: description, qty, rate, or amount.
-    c) Then for every data row, assign each number to the column it falls under \
-       based on the header mapping — NOT based on position (left/right/middle).
-    d) VERIFY: for rows that have all three numbers, check qty × rate ≈ amount. \
-       If it does not match, you assigned the columns wrong — re-read the headers \
-       and fix the mapping.
-    e) If headers are missing or ambiguous, use the multiplication check to determine \
-       which column is which: the two smaller numbers that multiply to the larger one \
-       are qty and rate; the larger product is the amount.
+12. CHAIN-OF-THOUGHT GRID RECONSTRUCTION (CRITICAL — DO THIS BEFORE JSON):
+    Israeli payslips often have wide white-space gaps between the Hebrew text column \
+    (far right) and the number columns (far left). This causes spatial misalignment \
+    if you try to read directly. YOU MUST use the following two-phase approach:
+
+    PHASE 1 — SCRATCHPAD: Before producing ANY JSON, output a <scratchpad> block. \
+    Inside it, reconstruct every table from the payslip as a Markdown table by \
+    tracing STRICTLY HORIZONTALLY across each row:
+    a) Start from the Hebrew label on the far right of a row.
+    b) Trace your eyes horizontally to the left across the SAME PRINTED LINE, \
+       ignoring any white space, until you reach the numbers on the far left.
+    c) The numbers on that SAME horizontal line belong to that label — do NOT \
+       let your eyes drift up or down to adjacent rows.
+    d) Read the column HEADER ROW first. Find where the headers תיאור, כמות, \
+       תעריף, סכום (or equivalent) are. The header position tells you which \
+       number column is which. The number directly UNDER the header כמות is qty. \
+       The number directly UNDER the header תעריף is rate. The number UNDER סכום is amount.
+    e) Write each table as a Markdown table with headers. Example:
+       ### תשלומים (Earnings)
+       | תיאור | כמות | תעריף | סכום |
+       |---|---|---|---|
+       | 013 משכורת | 51.00 | 83.75 | 4,271.25 |
+       | 024 שעות נוספות 125% | 7.25 | 63.75 | 462.19 |
+       ...
+    f) After each earnings row, add a verification line: \
+       "CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗"
+    g) Do the same for: ניכויי חובה (taxes), ניכויים והפרשות לקופות גמל (pension), \
+       leave balances, and totals.
+    h) For the tax table: if there is a סה"כ column, verify sum of parts = total. \
+       Write: "TAX CHECK: {tax1} + {tax2} + {tax3} = {sum} ≈ סה\"כ {total} ✓/✗"
+    i) For the pension table: clearly mark which columns are ניכוי עובד (employee) \
+       and which are הפרשת מעסיק (employer).
+    Close the scratchpad with </scratchpad>.
+
+    PHASE 2 — JSON: After the </scratchpad>, produce the final JSON by reading \
+    from YOUR OWN scratchpad tables — NOT by re-reading the image. The scratchpad \
+    is now your source of truth for the JSON mapping.
 
 13. STRICT OCR MODE — ZERO HALLUCINATION (CRITICAL):
     You are a STRICT OCR SCANNER. You MUST extract the exact characters printed on \
@@ -130,11 +152,11 @@ CRITICAL RULES:
 
 14. EARNINGS TABLE — ROW-BY-ROW EXTRACTION:
     You MUST extract EVERY row from the earnings table as a separate earnings_line entry.
-    For each row:
+    For each row, use the data from your scratchpad (Rule 12, Phase 1):
     a) Copy the EXACT Hebrew description (including any row code) into label_he.
     b) Map it to a standard English label if you recognize it; otherwise use a descriptive \
        English slug (e.g., "shift_bonus", "seniority", "clothing_allowance").
-    c) Assign qty, rate, and amount based on the header mapping from Rule 12.
+    c) Assign qty, rate, and amount based on the column headers you identified.
     d) If "qty" or "rate" is blank or missing for a row, set them to null — but still \
        extract the description and amount.
     DO NOT combine multiple rows into one. DO NOT invent rows that don't exist. \
@@ -147,9 +169,7 @@ CRITICAL RULES:
     - Set employment.base_rate to the BASE hourly rate (the 100% rate).
     - Each rate tier should be its own earnings_line with the correct qty (hours), \
       rate (effective hourly rate at that tier), and amount (total for that tier).
-    - Example: if the payslip shows "שעות רגילות 100% | 120 | 35.00 | 4,200.00" \
-      and "שעות נוספות 125% | 20 | 43.75 | 875.00", create two separate lines.
-    - The employment.base_rate should be 35.00 (the 100% rate).
+    - The employment.base_rate should be the 100% rate.
     - Set employment.hours_regular from the 100% row quantity; hours_overtime_125 \
       from the 125% row quantity; hours_overtime_150 from the 150% row quantity.
 
@@ -157,7 +177,8 @@ CRITICAL RULES:
     The ניכויי חובה (mandatory deductions) table often has NO GRIDLINES and text \
     can appear visually misaligned. DO NOT assign values based on visual proximity alone.
     a) Read the column headers first (e.g., מס הכנסה, ביטוח לאומי, מס בריאות, סה"כ).
-    b) Carefully align each number to the header DIRECTLY above it.
+    b) Carefully align each number to the header DIRECTLY above it — use the \
+       scratchpad from Rule 12 to verify alignment.
     c) MATH CHECK: The סה"כ (total) column MUST equal the sum of the individual \
        deduction columns in the same row. If your extracted total ≠ sum of parts, \
        you shifted the columns — re-align and fix.
@@ -172,12 +193,16 @@ CRITICAL RULES:
        and into pension.employer_tagmulim, pension.employer_pitzuyim, \
        pension.training_fund_employer.
     Read the sub-headers or column labels to determine which side is Employee vs. Employer. \
-    Common column pairs: ניכוי עובד (employee deduction) vs. הפרשת מעסיק (employer contribution). \
+    Mark these clearly in your scratchpad. \
     Do NOT put employer contributions into deductions_lines or vice versa. \
     Look for these fund types: תגמולים (tagmulim/savings), פיצויים (pitzuyim/severance), \
     קרן השתלמות (training fund). Each may have both an employee and employer component.
 
-OUTPUT: Return ONLY valid JSON matching the schema. No markdown, no explanation.\
+OUTPUT FORMAT:
+1. First, output a <scratchpad>...</scratchpad> block with Markdown tables as described \
+   in Rule 12, Phase 1. Include verification checks for each row.
+2. Then, output valid JSON matching the schema — derived from your scratchpad tables. \
+   No markdown fences around the JSON, no extra explanation.\
 """
 
 EXTRACTION_SCHEMA_HINT = """\
@@ -571,31 +596,33 @@ class ClaudeExtractor(LLMExtractor):
                 "The above image is a photograph of an Israeli payslip (תלוש שכר). "
                 "No OCR text is available — extract ALL data directly from the image. "
                 "The image is your ONLY source of data.\n\n"
-                "CRITICAL INSTRUCTIONS FOR IMAGE EXTRACTION:\n\n"
-                "1. STRICT OCR MODE: You are a strict OCR scanner. Extract the EXACT characters "
-                "printed on the payslip — do NOT guess, autocomplete, or substitute 'typical' "
-                "payslip terms. If it says '013 משכורת', output exactly '013 משכורת'. "
-                "If it says '015 נסיעות', output exactly '015 נסיעות' — NOT 'נשפח'. "
-                "If it says 'שעות נוספות 125%', do NOT change it to 'שעות הפסקה 125%'. "
-                "Include row codes (013, 015, 024, etc.) in label_he. "
-                "If a word is unreadable, approximate AND add a parse warning.\n\n"
-                "2. DYNAMIC COLUMN MAPPING: Do NOT assume a fixed column order. "
-                "FIRST read the column HEADER ROW of each table to find where תיאור, כמות, "
-                "תעריף, and סכום are. Column order varies between payroll systems — some put "
-                "תעריף before כמות, others put כמות before תעריף. Map numbers to the header "
-                "directly above them. VERIFY: qty × rate ≈ amount. If not, fix the mapping.\n\n"
-                "3. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW. "
-                "Extract only rows that visibly exist — do NOT invent rows.\n\n"
-                "4. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n\n"
-                "5. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
-                "SEPARATE earnings_line for each tier row. Set employment.base_rate to the 100% rate.\n\n"
-                "6. TAX TABLE: The ניכויי חובה table often has NO gridlines. Read column headers "
-                "first, align numbers to headers above them. MATH CHECK: סה\"כ must equal the "
-                "sum of individual deductions. If not, you shifted columns — fix it.\n\n"
-                "7. PENSION TABLE: Separate ניכויי עובד (employee deductions → deductions_lines) "
-                "from הפרשת מעסיק (employer contributions → employer_contrib_lines). "
-                "Do NOT mix them up. Look for sub-headers indicating employee vs. employer side.\n\n"
-                "8. Read totals (gross/net) from the summary row at the bottom.\n\n"
+                "YOU MUST USE THE TWO-PHASE APPROACH BELOW. Do NOT skip Phase 1.\n\n"
+                "═══ PHASE 1: SCRATCHPAD — Markdown Grid Reconstruction ═══\n\n"
+                "Output a <scratchpad> block FIRST. Inside it, reconstruct every table "
+                "from the payslip image as a Markdown table:\n\n"
+                "a) STRICT OCR: Read the EXACT characters printed — do NOT guess, autocomplete, "
+                "or substitute typical payslip terms. '013 משכורת' stays '013 משכורת'. "
+                "'015 נסיעות' stays '015 נסיעות' — NOT 'נשפח'. Include row codes in labels.\n\n"
+                "b) HORIZONTAL TRACING: For each row, start from the Hebrew text on the far "
+                "RIGHT and trace your eyes STRICTLY HORIZONTALLY to the LEFT across the SAME "
+                "printed line to reach the numbers. Ignore white space gaps. The numbers on "
+                "that same horizontal line belong to that label. Do NOT let your eyes drift "
+                "up or down to adjacent rows.\n\n"
+                "c) HEADER-BASED COLUMNS: Read the column HEADER ROW first. The number under "
+                "the header כמות is qty. The number under תעריף is rate. The number under "
+                "סכום is amount. Do NOT assume a fixed column order — it varies by system.\n\n"
+                "d) VERIFICATION: After each earnings row, write: "
+                "'CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗'. If ✗, you misaligned — fix it.\n\n"
+                "e) TAX TABLE: Reconstruct ניכויי חובה as a Markdown table. "
+                "Write: 'TAX CHECK: {tax} + {NI} + {health} = {sum} ≈ סה\"כ {total} ✓/✗'.\n\n"
+                "f) PENSION TABLE: Reconstruct with SEPARATE columns for ניכוי עובד (employee) "
+                "and הפרשת מעסיק (employer). Label which is which.\n\n"
+                "g) TOTALS and LEAVE BALANCES: Include as separate tables.\n\n"
+                "Close the scratchpad with </scratchpad>.\n\n"
+                "═══ PHASE 2: JSON ═══\n\n"
+                "After </scratchpad>, produce the final JSON by reading from YOUR OWN "
+                "scratchpad tables — NOT by re-reading the image. The scratchpad is now "
+                "your source of truth.\n\n"
                 f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
             )
         else:
@@ -616,7 +643,7 @@ class ClaudeExtractor(LLMExtractor):
                 },
                 json={
                     "model": self._model,
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                     "system": EXTRACTION_SYSTEM_PROMPT,
                     "messages": [{"role": "user", "content": messages_content}],
                 },
@@ -690,31 +717,33 @@ class OpenAIExtractor(LLMExtractor):
                 "The above image is a photograph of an Israeli payslip (תלוש שכר). "
                 "No OCR text is available — extract ALL data directly from the image. "
                 "The image is your ONLY source of data.\n\n"
-                "CRITICAL INSTRUCTIONS FOR IMAGE EXTRACTION:\n\n"
-                "1. STRICT OCR MODE: You are a strict OCR scanner. Extract the EXACT characters "
-                "printed on the payslip — do NOT guess, autocomplete, or substitute 'typical' "
-                "payslip terms. If it says '013 משכורת', output exactly '013 משכורת'. "
-                "If it says '015 נסיעות', output exactly '015 נסיעות' — NOT 'נשפח'. "
-                "If it says 'שעות נוספות 125%', do NOT change it to 'שעות הפסקה 125%'. "
-                "Include row codes (013, 015, 024, etc.) in label_he. "
-                "If a word is unreadable, approximate AND add a parse warning.\n\n"
-                "2. DYNAMIC COLUMN MAPPING: Do NOT assume a fixed column order. "
-                "FIRST read the column HEADER ROW of each table to find where תיאור, כמות, "
-                "תעריף, and סכום are. Column order varies between payroll systems — some put "
-                "תעריף before כמות, others put כמות before תעריף. Map numbers to the header "
-                "directly above them. VERIFY: qty × rate ≈ amount. If not, fix the mapping.\n\n"
-                "3. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW. "
-                "Extract only rows that visibly exist — do NOT invent rows.\n\n"
-                "4. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n\n"
-                "5. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
-                "SEPARATE earnings_line for each tier row. Set employment.base_rate to the 100% rate.\n\n"
-                "6. TAX TABLE: The ניכויי חובה table often has NO gridlines. Read column headers "
-                "first, align numbers to headers above them. MATH CHECK: סה\"כ must equal the "
-                "sum of individual deductions. If not, you shifted columns — fix it.\n\n"
-                "7. PENSION TABLE: Separate ניכויי עובד (employee deductions → deductions_lines) "
-                "from הפרשת מעסיק (employer contributions → employer_contrib_lines). "
-                "Do NOT mix them up. Look for sub-headers indicating employee vs. employer side.\n\n"
-                "8. Read totals (gross/net) from the summary row at the bottom.\n\n"
+                "YOU MUST USE THE TWO-PHASE APPROACH BELOW. Do NOT skip Phase 1.\n\n"
+                "═══ PHASE 1: SCRATCHPAD — Markdown Grid Reconstruction ═══\n\n"
+                "Output a <scratchpad> block FIRST. Inside it, reconstruct every table "
+                "from the payslip image as a Markdown table:\n\n"
+                "a) STRICT OCR: Read the EXACT characters printed — do NOT guess, autocomplete, "
+                "or substitute typical payslip terms. '013 משכורת' stays '013 משכורת'. "
+                "'015 נסיעות' stays '015 נסיעות' — NOT 'נשפח'. Include row codes in labels.\n\n"
+                "b) HORIZONTAL TRACING: For each row, start from the Hebrew text on the far "
+                "RIGHT and trace your eyes STRICTLY HORIZONTALLY to the LEFT across the SAME "
+                "printed line to reach the numbers. Ignore white space gaps. The numbers on "
+                "that same horizontal line belong to that label. Do NOT let your eyes drift "
+                "up or down to adjacent rows.\n\n"
+                "c) HEADER-BASED COLUMNS: Read the column HEADER ROW first. The number under "
+                "the header כמות is qty. The number under תעריף is rate. The number under "
+                "סכום is amount. Do NOT assume a fixed column order — it varies by system.\n\n"
+                "d) VERIFICATION: After each earnings row, write: "
+                "'CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗'. If ✗, you misaligned — fix it.\n\n"
+                "e) TAX TABLE: Reconstruct ניכויי חובה as a Markdown table. "
+                "Write: 'TAX CHECK: {tax} + {NI} + {health} = {sum} ≈ סה\"כ {total} ✓/✗'.\n\n"
+                "f) PENSION TABLE: Reconstruct with SEPARATE columns for ניכוי עובד (employee) "
+                "and הפרשת מעסיק (employer). Label which is which.\n\n"
+                "g) TOTALS and LEAVE BALANCES: Include as separate tables.\n\n"
+                "Close the scratchpad with </scratchpad>.\n\n"
+                "═══ PHASE 2: JSON ═══\n\n"
+                "After </scratchpad>, produce the final JSON by reading from YOUR OWN "
+                "scratchpad tables — NOT by re-reading the image. The scratchpad is now "
+                "your source of truth.\n\n"
                 f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
             )
         else:
@@ -734,7 +763,7 @@ class OpenAIExtractor(LLMExtractor):
                 },
                 json={
                     "model": self._model,
-                    "max_tokens": 4096,
+                    "max_tokens": 8192,
                     "messages": [
                         {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
                         {"role": "user", "content": messages_content},
