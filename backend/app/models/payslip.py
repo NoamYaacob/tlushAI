@@ -90,6 +90,7 @@ class Pension(BaseModel):
     employer_pitzuyim: Optional[float] = None
     training_fund_employee: Optional[float] = None
     training_fund_employer: Optional[float] = None
+    fund_name: Optional[str] = None
 
 
 class LeaveBalances(BaseModel):
@@ -108,11 +109,20 @@ class Totals(BaseModel):
     taxable_gross: Optional[float] = None
     net: Optional[float] = None
     total_deductions: Optional[float] = None
+    total_employer_cost: Optional[float] = None
+
+
+class ConfirmationHint(BaseModel):
+    """A field that needs user confirmation, with Hebrew label."""
+    field_key: str
+    label_he: str
+    help_he: Optional[str] = None
 
 
 class ParseMeta(BaseModel):
     parse_warnings: list[str] = Field(default_factory=list)
     needs_user_confirmation_fields: list[str] = Field(default_factory=list)
+    confirmation_hints: list[ConfirmationHint] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -164,6 +174,7 @@ class LineExplanation(BaseModel):
     affects_taxable: Optional[bool] = None
     status: str = "ok"  # "ok" | "check" | "warn"
     note_he: Optional[str] = None
+    section: Optional[str] = None  # "earnings" | "deductions" | "employer_contributions" | "tax"
 
 
 class SummaryCard(BaseModel):

@@ -641,7 +641,7 @@ class TestRule11IncomeTax:
                 {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 500},
                 {"label": "health_tax", "label_he": "מס בריאות", "amount": 300},
             ],
-            "totals": {"gross": 20000, "net": 19100},
+            "totals": {"gross": 20000, "taxable_gross": 20000, "net": 19100},
         })
         flags = _flags_titled(run_rules(p, _confirmed(base_salary_or_rate=20000)), "מס הכנסה")
         assert len(flags) == 1

@@ -229,8 +229,9 @@ CRITICAL RULES:
 OUTPUT FORMAT:
 1. First, output a <scratchpad>...</scratchpad> block with Markdown tables as described \
    in Rule 12, Phase 1. Include verification checks for each row.
-2. Then, output valid JSON matching the schema — derived from your scratchpad tables. \
-   No markdown fences around the JSON, no extra explanation.\
+2. Then, output ONLY valid JSON matching the schema — derived from your scratchpad tables. \
+   No markdown fences around the JSON, no extra explanation, no commentary after the JSON. \
+   The JSON must be the LAST thing in your output (after the scratchpad block).\
 """
 
 EXTRACTION_SCHEMA_HINT = """\
@@ -258,7 +259,8 @@ Expected JSON schema (abbreviated):
     "employer_tagmulim": float|null,
     "employer_pitzuyim": float|null,
     "training_fund_employee": float|null,
-    "training_fund_employer": float|null
+    "training_fund_employer": float|null,
+    "fund_name": str|null
   },
   "leave": {
     "vacation_open": float|null, "vacation_accrued": float|null,
@@ -266,7 +268,7 @@ Expected JSON schema (abbreviated):
     "sick_open": float|null, "sick_accrued": float|null,
     "sick_used": float|null, "sick_close": float|null
   },
-  "totals": {"gross": float|null, "taxable_gross": float|null, "net": float|null, "total_deductions": float|null},
+  "totals": {"gross": float|null, "taxable_gross": float|null, "net": float|null, "total_deductions": float|null, "total_employer_cost": float|null},
   "meta": {"parse_warnings": [str], "needs_user_confirmation_fields": [str]}
 }\
 """
@@ -405,6 +407,11 @@ class LLMExtractor(ABC):
         """Parse LLM output JSON into a Payslip, handling common issues."""
         cleaned = raw_json.strip()
 
+        # Strip scratchpad block if present (Phase 1 CoT output)
+        scratchpad_end = cleaned.find("</scratchpad>")
+        if scratchpad_end != -1:
+            cleaned = cleaned[scratchpad_end + len("</scratchpad>"):].strip()
+
         # Strip markdown fences if present
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
@@ -420,6 +427,8 @@ class LLMExtractor(ABC):
         # Fix common JSON issues from LLMs
         cleaned = _TRAILING_COMMA_RE.sub(r"\1", cleaned)
         cleaned = cleaned.replace(": NaN", ": null").replace(": Infinity", ": null")
+        # Remove single-line JS comments that some LLMs add
+        cleaned = re.sub(r"//[^\n]*", "", cleaned)
 
         logger.debug("LLM JSON response: %d chars after cleanup", len(cleaned))
 

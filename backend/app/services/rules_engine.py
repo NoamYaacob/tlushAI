@@ -86,8 +86,11 @@ def run_rules(payslip: Payslip, confirmed: UserConfirmedFields) -> list[Flag]:
     flags.extend(_check_tax_lines_present(payslip))        # 9
     flags.extend(_check_large_expenses(payslip, confirmed))# 10
     flags.extend(_check_income_tax(payslip))               # 11
-    flags.extend(_check_national_insurance(payslip))        # 12
-    flags.extend(_check_health_tax(payslip))                # 13
+    flags.extend(_check_national_insurance(payslip))       # 12
+    flags.extend(_check_health_tax(payslip))               # 13
+    flags.extend(_check_gross_sum(payslip))                # 14
+    flags.extend(_check_employer_contrib_not_reducing_net(payslip))  # 15
+    flags.extend(_check_car_benefit(payslip))              # 16
     return flags
 
 
@@ -663,8 +666,12 @@ def _check_income_tax(payslip: Payslip) -> list[Flag]:
     """
     Compare the income tax deducted on the payslip against the expected
     amount from the 2026 tax brackets (with default credit points).
+
+    Gated: skip if we don't have taxable_gross (we can't know credit points,
+    tax coordination, partial-month proration, or retro adjustments).
     """
-    gross = payslip.totals.taxable_gross or payslip.totals.gross
+    # Only run if explicit taxable_gross is available
+    gross = payslip.totals.taxable_gross
     if not gross or gross <= 0:
         return []
 
@@ -699,7 +706,7 @@ def _check_income_tax(payslip: Payslip) -> list[Flag]:
             "מומלץ לבדוק תיאום מס ואישורי זיכוי."
         ),
         evidence=(
-            f"Gross: {gross:.2f}, Actual tax: {actual_tax:.2f}, "
+            f"Taxable gross: {gross:.2f}, Actual tax: {actual_tax:.2f}, "
             f"Expected (default credits): {expected:.2f}, Diff: {diff:.2f}"
         ),
         suggested_next_step="בדוק אישור תיאום מס ונקודות זיכוי מול פקיד השומה",
@@ -803,4 +810,132 @@ def _check_health_tax(payslip: Payslip) -> list[Flag]:
         ),
         suggested_next_step="בדוק את בסיס החישוב למס בריאות",
         confidence=0.55,
+    )]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 14 — Gross = sum of earnings lines
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _check_gross_sum(payslip: Payslip) -> list[Flag]:
+    """Verify that gross matches the sum of individual earnings lines."""
+    gross = payslip.totals.gross
+    if gross is None or not payslip.earnings_lines:
+        return []
+
+    earnings_sum = sum(l.amount for l in payslip.earnings_lines)
+    diff = abs(gross - earnings_sum)
+
+    if diff <= NET_TOLERANCE_NIS:
+        return []
+
+    # Car benefit inflates gross but is also deducted — skip this check
+    # if a car benefit line is present (it complicates the math).
+    car_kw = {"car_benefit", "שווי שימוש רכב", "שווי רכב", "רכב צמוד"}
+    has_car = any(
+        _label_matches_any(l.label, l.label_he, car_kw) for l in payslip.earnings_lines
+    )
+    if has_car:
+        return []
+
+    return [Flag(
+        severity=FlagSeverity.info,
+        title_he="הפרש בין ברוטו לסכום שורות ההכנסה",
+        explanation_he=(
+            f"ברוטו בתלוש: {gross:,.2f} ₪, "
+            f"סכום שורות הכנסה: {earnings_sum:,.2f} ₪ "
+            f"(הפרש: {diff:,.2f} ₪). "
+            "ייתכן שחסרות שורות הכנסה בחילוץ, או שהברוטו כולל רכיבים נוספים."
+        ),
+        evidence=(
+            f"Gross: {gross:.2f}, Earnings sum: {earnings_sum:.2f}, Diff: {diff:.2f}"
+        ),
+        suggested_next_step="בדוק את כל שורות ההכנסה בתלוש המקורי",
+        confidence=0.6,
+    )]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 15 — Employer contributions should not reduce net
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _check_employer_contrib_not_reducing_net(payslip: Payslip) -> list[Flag]:
+    """Flag if employer contributions appear in deductions (they shouldn't reduce net)."""
+    emp_contrib_kw = {
+        "pension_employer", "severance_employer", "training_fund_employer",
+        "תגמולים מעביד", "פנסיה מעביד", "הפרשת מעביד", "פיצויים מעביד",
+        "קרן השתלמות מעביד", "הפרשת מעסיק",
+    }
+    found: list[str] = []
+    for d in payslip.deductions_lines:
+        if _label_matches_any(d.label, d.label_he, emp_contrib_kw):
+            display = (d.label_he or d.label).strip()
+            found.append(f"{display} ({d.amount:,.2f} ₪)")
+
+    if not found:
+        return []
+
+    return [Flag(
+        severity=FlagSeverity.warn,
+        title_he="הפרשת מעסיק מופיעה כניכוי מהעובד",
+        explanation_he=(
+            f"הפרשות מעסיק הבאות מופיעות ברשימת הניכויים: {', '.join(found)}. "
+            "הפרשות מעסיק לא צריכות לגרוע מהשכר נטו. "
+            "ייתכן שמדובר בשגיאת חילוץ או בבעיה בתלוש."
+        ),
+        evidence=f"Employer contribs in deductions: {found}",
+        suggested_next_step="בדוק בתלוש המקורי — האם הפרשות המעסיק באמת מנוכות מהנטו",
+        confidence=0.7,
+    )]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 16 — Car benefit (שווי שימוש רכב)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _check_car_benefit(payslip: Payslip) -> list[Flag]:
+    """If a car benefit earning exists, check that there's a matching deduction."""
+    car_kw = {"car_benefit", "שווי שימוש רכב", "שווי רכב", "רכב צמוד", "גילום רכב"}
+
+    car_earning = None
+    for l in payslip.earnings_lines:
+        if _label_matches_any(l.label, l.label_he, car_kw):
+            car_earning = l.amount
+            break
+
+    if car_earning is None:
+        return []
+
+    # Look for matching deduction
+    car_deduction = None
+    car_ded_kw = {"car_benefit", "שווי שימוש רכב", "שווי רכב", "רכב צמוד", "ניכוי שווי רכב", "ניכוי רכב"}
+    for d in payslip.deductions_lines:
+        if _label_matches_any(d.label, d.label_he, car_ded_kw):
+            car_deduction = d.amount
+            break
+
+    if car_deduction is not None:
+        diff = abs(car_earning - car_deduction)
+        if diff <= NET_TOLERANCE_NIS:
+            return []  # Balanced — no net impact as expected
+
+    return [Flag(
+        severity=FlagSeverity.info,
+        title_he="שווי שימוש רכב — בדוק ניכוי מקזז",
+        explanation_he=(
+            f"זוהה שווי שימוש רכב בסך {car_earning:,.2f} ₪ בהכנסות. "
+            "רכיב זה חייב במס אך לא אמור להשפיע על הנטו — "
+            "בדרך כלל מופיע גם כניכוי באותו סכום. "
+            + (
+                f"ניכוי מקזז שנמצא: {car_deduction:,.2f} ₪ (הפרש: {abs(car_earning - car_deduction):,.2f} ₪)."
+                if car_deduction is not None
+                else "לא נמצא ניכוי מקזז תואם."
+            )
+        ),
+        evidence=(
+            f"Car benefit earning: {car_earning:.2f}, "
+            f"Car benefit deduction: {car_deduction}"
+        ),
+        suggested_next_step="בדוק בתלוש המקורי שהשווי מופיע גם כניכוי",
+        confidence=0.6,
     )]

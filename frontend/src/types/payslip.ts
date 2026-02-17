@@ -10,6 +10,12 @@ export type LineCategory =
   | "leave"
   | "other";
 
+export type LineSection =
+  | "earnings"
+  | "deductions"
+  | "employer_contributions"
+  | "tax";
+
 // ── Payslip sub-schemas ──
 
 export interface Employer {
@@ -66,6 +72,7 @@ export interface Pension {
   employer_pitzuyim?: number | null;
   training_fund_employee?: number | null;
   training_fund_employer?: number | null;
+  fund_name?: string | null;
 }
 
 export interface LeaveBalances {
@@ -84,11 +91,19 @@ export interface Totals {
   taxable_gross?: number | null;
   net?: number | null;
   total_deductions?: number | null;
+  total_employer_cost?: number | null;
+}
+
+export interface ConfirmationHint {
+  field_key: string;
+  label_he: string;
+  help_he?: string | null;
 }
 
 export interface ParseMeta {
   parse_warnings: string[];
   needs_user_confirmation_fields: string[];
+  confirmation_hints: ConfirmationHint[];
 }
 
 // ── Top-level Payslip ──
@@ -136,6 +151,7 @@ export interface LineExplanation {
   affects_taxable?: boolean | null;
   status: string;
   note_he?: string | null;
+  section?: LineSection | null;
 }
 
 export interface SummaryCard {

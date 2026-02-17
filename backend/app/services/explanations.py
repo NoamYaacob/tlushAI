@@ -1,12 +1,12 @@
 """
 Hebrew explanation generator for payslip line items.
 
-Phase 1: basic line categorization and Hebrew labels for common items.
-Full implementation with detailed explanations in Phase 2.
+Uses the centralized glossary for consistent categorization and Hebrew labels.
 """
 
 from __future__ import annotations
 
+from ..data.glossary import classify_line
 from ..models.payslip import (
     AnalysisResult,
     Flag,
@@ -17,26 +17,14 @@ from ..models.payslip import (
     SummaryCard,
 )
 
-# ---------------------------------------------------------------------------
-# Known line-item mappings (label -> Hebrew meaning + category)
-# ---------------------------------------------------------------------------
-
-_LINE_MEANINGS: dict[str, tuple[str, LineCategory, bool, bool]] = {
-    # label -> (meaning_he, category, affects_gross, affects_taxable)
-    "base_salary": ("שכר הבסיס החודשי לפי הסכם העבודה", LineCategory.earning, True, True),
-    "overtime_125": ("תוספת שעות נוספות בשיעור 125% מהשכר הרגיל", LineCategory.earning, True, True),
-    "overtime_150": ("תוספת שעות נוספות בשיעור 150% מהשכר הרגיל", LineCategory.earning, True, True),
-    "travel_allowance": ("החזר הוצאות נסיעה לעבודה וממנה", LineCategory.earning, True, False),
-    "recuperation": ("דמי הבראה — זכות שנתית לפי הסכם/צו הרחבה", LineCategory.earning, True, True),
-    "bonus": ("בונוס / מענק — בדוק אם חד-פעמי או קבוע", LineCategory.earning, True, True),
-    "income_tax": ("מס הכנסה שנוכה במקור לפי מדרגות המס", LineCategory.tax, False, False),
-    "national_insurance": ("דמי ביטוח לאומי (עובד) — ביטוח סוציאלי", LineCategory.tax, False, False),
-    "health_tax": ("מס בריאות — ניכוי חובה לקופת חולים", LineCategory.tax, False, False),
-    "pension_employee": ("הפרשת עובד לפנסיה (תגמולים)", LineCategory.deduction, False, False),
-    "pension_employer": ("הפרשת מעביד לפנסיה (תגמולים)", LineCategory.employer_contribution, False, False),
-    "severance_employer": ("הפרשת מעביד לפיצויי פיטורין", LineCategory.employer_contribution, False, False),
-    "training_fund_employee": ("הפרשת עובד לקרן השתלמות", LineCategory.deduction, False, False),
-    "training_fund_employer": ("הפרשת מעביד לקרן השתלמות", LineCategory.employer_contribution, False, False),
+# Section labels for grouping line explanations
+_SECTION_MAP = {
+    LineCategory.earning: "earnings",
+    LineCategory.deduction: "deductions",
+    LineCategory.employer_contribution: "employer_contributions",
+    LineCategory.tax: "tax",
+    LineCategory.leave: "earnings",
+    LineCategory.other: "earnings",
 }
 
 
@@ -65,41 +53,47 @@ def _build_line_explanations(payslip: Payslip) -> list[LineExplanation]:
     explanations: list[LineExplanation] = []
 
     for line in payslip.earnings_lines:
-        info = _LINE_MEANINGS.get(line.label)
+        info = classify_line(line.label, line.label_he)
+        cat = info.category if info else LineCategory.earning
         explanations.append(LineExplanation(
             label=line.label_he or line.label,
             amount=line.amount,
             qty=line.qty,
             rate=line.rate,
-            category=info[1] if info else LineCategory.earning,
-            meaning_he=info[0] if info else "רכיב שכר — בדוק מול הסכם העבודה",
-            affects_gross=info[2] if info else True,
-            affects_taxable=info[3] if info else None,
+            category=cat,
+            meaning_he=info.explanation_he if info else "רכיב שכר — בדוק מול הסכם העבודה",
+            affects_gross=info.affects_gross if info else True,
+            affects_taxable=info.affects_taxable if info else None,
             status="ok",
+            section=_SECTION_MAP.get(cat, "earnings"),
         ))
 
     for line in payslip.deductions_lines:
-        info = _LINE_MEANINGS.get(line.label)
+        info = classify_line(line.label, line.label_he)
+        cat = info.category if info else LineCategory.deduction
         explanations.append(LineExplanation(
             label=line.label_he or line.label,
             amount=line.amount,
-            category=info[1] if info else LineCategory.deduction,
-            meaning_he=info[0] if info else "ניכוי — בדוק מול הסכם העבודה",
+            category=cat,
+            meaning_he=info.explanation_he if info else "ניכוי — בדוק מול הסכם העבודה",
             affects_gross=False,
-            affects_taxable=info[3] if info else None,
+            affects_taxable=info.affects_taxable if info else None,
             status="ok",
+            section=_SECTION_MAP.get(cat, "deductions"),
         ))
 
     for line in payslip.employer_contrib_lines:
-        info = _LINE_MEANINGS.get(line.label)
+        info = classify_line(line.label, line.label_he)
+        cat = info.category if info else LineCategory.employer_contribution
         explanations.append(LineExplanation(
             label=line.label_he or line.label,
             amount=line.amount,
-            category=info[1] if info else LineCategory.employer_contribution,
-            meaning_he=info[0] if info else "הפרשת מעסיק — לא מנוכה מהשכר",
+            category=cat,
+            meaning_he=info.explanation_he if info else "הפרשת מעסיק — לא מנוכה מהשכר",
             affects_gross=False,
             affects_taxable=False,
             status="ok",
+            section="employer_contributions",
         ))
 
     return explanations
@@ -136,6 +130,17 @@ def _build_ok_items(payslip: Payslip, flags: list[Flag]) -> list[OkItem]:
             confidence=0.9,
         ))
 
+    # Gross = sum of earnings check
+    if payslip.totals.gross and payslip.earnings_lines:
+        earnings_sum = sum(l.amount for l in payslip.earnings_lines)
+        if abs(payslip.totals.gross - earnings_sum) <= 5.0:
+            if "הפרש בין ברוטו לסכום שורות ההכנסה" not in flagged_titles:
+                ok.append(OkItem(
+                    title_he="סכום הכנסות תואם ברוטו",
+                    explanation_he="סכום שורות ההכנסה תואם לברוטו המצוין בתלוש.",
+                    confidence=0.85,
+                ))
+
     return ok
 
 
@@ -161,26 +166,32 @@ def _build_summary_cards(payslip: Payslip) -> list[SummaryCard]:
     cards.append(_card("net", "שכר נטו", payslip.totals.net))
     cards.append(_card("total_deductions", "סה\"כ ניכויים", payslip.totals.total_deductions))
 
-    # Pension total
-    pension_total = None
-    if payslip.pension.employee_tagmulim is not None:
-        pension_total = payslip.pension.employee_tagmulim
-        if payslip.pension.employer_tagmulim:
-            pension_total += payslip.pension.employer_tagmulim
+    # Pension total (employee only — employer contributions are separate)
+    pension_employee = payslip.pension.employee_tagmulim
+    cards.append(_card("pension_employee", "פנסיה (עובד)", pension_employee))
+
+    # Employer pension total
+    pension_employer = None
+    if payslip.pension.employer_tagmulim is not None:
+        pension_employer = payslip.pension.employer_tagmulim
         if payslip.pension.employer_pitzuyim:
-            pension_total += payslip.pension.employer_pitzuyim
-    cards.append(_card("pension", "סה\"כ פנסיה", pension_total))
+            pension_employer += payslip.pension.employer_pitzuyim
+    cards.append(_card("pension_employer", "פנסיה (מעסיק)", pension_employer))
 
     # Travel
+    travel_kw = {"travel", "נסיעות", "נסיעה"}
     travel = next(
-        (e.amount for e in payslip.earnings_lines if "travel" in e.label.lower()),
+        (e.amount for e in payslip.earnings_lines
+         if any(kw in e.label.lower() or kw in (e.label_he or "") for kw in travel_kw)),
         None,
     )
     cards.append(_card("travel", "נסיעות", travel))
 
     # Overtime
+    ot_kw = {"overtime", "נוספות"}
     overtime = sum(
-        e.amount for e in payslip.earnings_lines if "overtime" in e.label.lower()
+        e.amount for e in payslip.earnings_lines
+        if any(kw in e.label.lower() or kw in (e.label_he or "") for kw in ot_kw)
     ) or None
     cards.append(_card("overtime", "שעות נוספות", overtime))
 

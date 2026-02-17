@@ -3,6 +3,7 @@ import { useWizard } from "@/context/WizardContext";
 import { analyzePayslip } from "@/lib/api";
 import { ErrorAlert } from "@/components/ErrorAlert";
 import { Spinner } from "@/components/Spinner";
+import { S } from "@/lib/strings";
 import type { AppError, SalaryType, UserConfirmedFields } from "@/types/payslip";
 
 const HEBREW_MONTHS = [
@@ -123,7 +124,13 @@ export function ConfirmStep() {
       {needsConfirmation.length > 0 && (
         <div className="rounded-lg border border-blue-300 bg-blue-50 p-3">
           <p className="text-sm text-blue-800">
-            שדות שדורשים אימות ידני: {needsConfirmation.join(", ")}
+            {S.confirmFieldsNeedVerification}{" "}
+            {(payslip.meta.confirmation_hints ?? []).length > 0
+              ? payslip.meta.confirmation_hints
+                  .filter((h) => needsConfirmation.includes(h.field_key))
+                  .map((h) => h.label_he)
+                  .join(", ") || needsConfirmation.join(", ")
+              : needsConfirmation.join(", ")}
           </p>
         </div>
       )}

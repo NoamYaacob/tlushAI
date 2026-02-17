@@ -1,0 +1,371 @@
+{
+  "line_items": {
+    "base_salary": {
+      "canonical_key": "base_salary",
+      "hebrew_names": ["שכר יסוד", "שכר בסיס", "משכורת בסיס", "שכר בסיסי", "שכר חודשי"],
+      "english_names": ["base salary", "base pay", "basic salary"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "שכר הבסיס החודשי לפי הסכם העבודה",
+      "typical_range_pct_of_gross": [0.3, 0.9]
+    },
+    "overtime_125": {
+      "canonical_key": "overtime_125",
+      "hebrew_names": ["שעות נוספות 125", "שעות נוספות 125%", "ש.נ 125", "ש\"נ 125"],
+      "english_names": ["overtime 125", "overtime_125"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת שעות נוספות בשיעור 125% מהשכר הרגיל",
+      "typical_range_pct_of_gross": [0.0, 0.3]
+    },
+    "overtime_150": {
+      "canonical_key": "overtime_150",
+      "hebrew_names": ["שעות נוספות 150", "שעות נוספות 150%", "ש.נ 150", "ש\"נ 150"],
+      "english_names": ["overtime 150", "overtime_150"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת שעות נוספות בשיעור 150% מהשכר הרגיל",
+      "typical_range_pct_of_gross": [0.0, 0.2]
+    },
+    "overtime_175": {
+      "canonical_key": "overtime_175",
+      "hebrew_names": ["שעות נוספות 175", "שעות נוספות 175%", "ש.נ 175", "ש\"נ 175"],
+      "english_names": ["overtime 175", "overtime_175"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת שעות נוספות בשיעור 175% מהשכר הרגיל (שבת/חג)",
+      "typical_range_pct_of_gross": [0.0, 0.15]
+    },
+    "overtime_200": {
+      "canonical_key": "overtime_200",
+      "hebrew_names": ["שעות נוספות 200", "שעות נוספות 200%", "ש.נ 200", "ש\"נ 200"],
+      "english_names": ["overtime 200", "overtime_200"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת שעות נוספות בשיעור 200% מהשכר הרגיל",
+      "typical_range_pct_of_gross": [0.0, 0.15]
+    },
+    "travel_allowance": {
+      "canonical_key": "travel_allowance",
+      "hebrew_names": ["דמי נסיעות", "נסיעות", "החזר נסיעות", "דמי נסיעה", "הוצאות נסיעה"],
+      "english_names": ["travel allowance", "travel", "commute"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": false,
+      "explanation_he": "החזר הוצאות נסיעה לעבודה וממנה",
+      "typical_range_pct_of_gross": [0.01, 0.1]
+    },
+    "recuperation": {
+      "canonical_key": "recuperation",
+      "hebrew_names": ["דמי הבראה", "הבראה"],
+      "english_names": ["recuperation", "recuperation pay"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "דמי הבראה — זכות שנתית לפי הסכם/צו הרחבה",
+      "typical_range_pct_of_gross": [0.0, 0.15]
+    },
+    "bonus": {
+      "canonical_key": "bonus",
+      "hebrew_names": ["בונוס", "מענק", "פרמיה", "תגמול"],
+      "english_names": ["bonus", "premium", "incentive"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "בונוס / מענק — בדוק אם חד-פעמי או קבוע",
+      "typical_range_pct_of_gross": [0.0, 0.5]
+    },
+    "seniority_allowance": {
+      "canonical_key": "seniority_allowance",
+      "hebrew_names": ["תוספת ותק", "ותק"],
+      "english_names": ["seniority allowance", "seniority"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת ותק לפי הסכם עבודה",
+      "typical_range_pct_of_gross": [0.0, 0.1]
+    },
+    "shift_supplement": {
+      "canonical_key": "shift_supplement",
+      "hebrew_names": ["תוספת משמרות", "גמול משמרות", "משמרות"],
+      "english_names": ["shift supplement", "shift pay"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת עבור עבודה במשמרות",
+      "typical_range_pct_of_gross": [0.0, 0.2]
+    },
+    "global_overtime": {
+      "canonical_key": "global_overtime",
+      "hebrew_names": ["שעות נוספות גלובליות", "ש.נ גלובלי", "גמול גלובלי"],
+      "english_names": ["global overtime", "global OT"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תשלום גלובלי עבור שעות נוספות (במקום חישוב לפי שעה)",
+      "typical_range_pct_of_gross": [0.0, 0.3]
+    },
+    "meals": {
+      "canonical_key": "meals",
+      "hebrew_names": ["ארוחות", "דמי כלכלה", "כלכלה"],
+      "english_names": ["meals", "meal allowance"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת ארוחות / דמי כלכלה",
+      "typical_range_pct_of_gross": [0.0, 0.05]
+    },
+    "phone_allowance": {
+      "canonical_key": "phone_allowance",
+      "hebrew_names": ["טלפון", "החזר טלפון", "דמי טלפון"],
+      "english_names": ["phone allowance", "phone"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת / החזר הוצאות טלפון",
+      "typical_range_pct_of_gross": [0.0, 0.03]
+    },
+    "clothing_allowance": {
+      "canonical_key": "clothing_allowance",
+      "hebrew_names": ["ביגוד", "דמי ביגוד", "החזר ביגוד"],
+      "english_names": ["clothing allowance", "clothing"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תוספת / החזר דמי ביגוד",
+      "typical_range_pct_of_gross": [0.0, 0.03]
+    },
+    "car_benefit": {
+      "canonical_key": "car_benefit",
+      "hebrew_names": ["שווי שימוש רכב", "שווי רכב", "רכב צמוד", "גילום רכב"],
+      "english_names": ["car benefit", "company car", "vehicle benefit"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "שווי שימוש ברכב צמוד — תוספת חייבת במס. הסכום מתווסף לברוטו וגם מנוכה, כך שאינו משפיע על הנטו",
+      "typical_range_pct_of_gross": [0.0, 0.25]
+    },
+    "vacation_pay": {
+      "canonical_key": "vacation_pay",
+      "hebrew_names": ["דמי חופשה", "חופשה", "פדיון חופשה"],
+      "english_names": ["vacation pay", "holiday pay"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תשלום עבור ימי חופשה שנוצלו או פדיון חופשה",
+      "typical_range_pct_of_gross": [0.0, 0.3]
+    },
+    "sick_pay": {
+      "canonical_key": "sick_pay",
+      "hebrew_names": ["דמי מחלה", "מחלה"],
+      "english_names": ["sick pay", "sick leave pay"],
+      "category": "earning",
+      "affects_gross": true,
+      "affects_taxable": true,
+      "explanation_he": "תשלום עבור ימי מחלה",
+      "typical_range_pct_of_gross": [0.0, 0.3]
+    },
+    "income_tax": {
+      "canonical_key": "income_tax",
+      "hebrew_names": ["מס הכנסה", "מ\"ה"],
+      "english_names": ["income tax", "income_tax"],
+      "category": "tax",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "מס הכנסה שנוכה במקור לפי מדרגות המס",
+      "typical_range_pct_of_gross": [0.0, 0.5]
+    },
+    "national_insurance": {
+      "canonical_key": "national_insurance",
+      "hebrew_names": ["ביטוח לאומי", "ב.ל", "ב\"ל", "דמי ביטוח לאומי"],
+      "english_names": ["national insurance", "national_insurance", "bituach leumi"],
+      "category": "tax",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "דמי ביטוח לאומי (עובד) — ביטוח סוציאלי",
+      "typical_range_pct_of_gross": [0.01, 0.07]
+    },
+    "health_tax": {
+      "canonical_key": "health_tax",
+      "hebrew_names": ["מס בריאות", "דמי בריאות"],
+      "english_names": ["health tax", "health_tax", "health insurance"],
+      "category": "tax",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "מס בריאות — ניכוי חובה לקופת חולים",
+      "typical_range_pct_of_gross": [0.03, 0.05]
+    },
+    "pension_employee": {
+      "canonical_key": "pension_employee",
+      "hebrew_names": ["תגמולים עובד", "פנסיה עובד", "הפרשת עובד לפנסיה"],
+      "english_names": ["pension employee", "pension_employee", "employee pension"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "הפרשת עובד לפנסיה (תגמולים)",
+      "typical_range_pct_of_gross": [0.05, 0.07]
+    },
+    "pension_employer": {
+      "canonical_key": "pension_employer",
+      "hebrew_names": ["תגמולים מעביד", "פנסיה מעביד", "הפרשת מעביד לפנסיה", "הפרשת מעסיק לפנסיה"],
+      "english_names": ["pension employer", "pension_employer", "employer pension"],
+      "category": "employer_contribution",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "הפרשת מעביד לפנסיה (תגמולים)",
+      "typical_range_pct_of_gross": [0.06, 0.075]
+    },
+    "severance_employer": {
+      "canonical_key": "severance_employer",
+      "hebrew_names": ["פיצויים", "פיצויי פיטורין", "הפרשה לפיצויים"],
+      "english_names": ["severance", "severance_employer"],
+      "category": "employer_contribution",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "הפרשת מעביד לפיצויי פיטורין",
+      "typical_range_pct_of_gross": [0.05, 0.0833]
+    },
+    "training_fund_employee": {
+      "canonical_key": "training_fund_employee",
+      "hebrew_names": ["קרן השתלמות עובד", "קרן השתלמות", "קה\"ש עובד"],
+      "english_names": ["training fund employee", "training_fund_employee"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "הפרשת עובד לקרן השתלמות",
+      "typical_range_pct_of_gross": [0.02, 0.025]
+    },
+    "training_fund_employer": {
+      "canonical_key": "training_fund_employer",
+      "hebrew_names": ["קרן השתלמות מעביד", "קה\"ש מעביד", "קרן השתלמות מעסיק"],
+      "english_names": ["training fund employer", "training_fund_employer"],
+      "category": "employer_contribution",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "הפרשת מעביד לקרן השתלמות",
+      "typical_range_pct_of_gross": [0.07, 0.075]
+    },
+    "union_fee": {
+      "canonical_key": "union_fee",
+      "hebrew_names": ["ועד עובדים", "דמי ועד", "ועד"],
+      "english_names": ["union fee", "union_fee", "workers committee"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "דמי ועד עובדים",
+      "typical_range_pct_of_gross": [0.0, 0.02]
+    },
+    "loan_repayment": {
+      "canonical_key": "loan_repayment",
+      "hebrew_names": ["החזר הלוואה", "הלוואה"],
+      "english_names": ["loan repayment", "loan_repayment", "loan"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "החזר הלוואה מהמעסיק",
+      "typical_range_pct_of_gross": [0.0, 0.3]
+    },
+    "garnishment": {
+      "canonical_key": "garnishment",
+      "hebrew_names": ["עיקול", "עיקול משכורת"],
+      "english_names": ["garnishment", "wage garnishment"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "ניכוי בגין צו עיקול (עיקול שכר)",
+      "typical_range_pct_of_gross": [0.0, 0.5]
+    },
+    "advance_deduction": {
+      "canonical_key": "advance_deduction",
+      "hebrew_names": ["מפרעה", "ניכוי מפרעה", "החזר מפרעה"],
+      "english_names": ["advance", "advance_deduction"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "ניכוי מפרעה (סכום ששולם מראש)",
+      "typical_range_pct_of_gross": [0.0, 0.5]
+    },
+    "car_benefit_deduction": {
+      "canonical_key": "car_benefit_deduction",
+      "hebrew_names": ["ניכוי שווי רכב", "ניכוי רכב צמוד"],
+      "english_names": ["car benefit deduction"],
+      "category": "deduction",
+      "affects_gross": false,
+      "affects_taxable": false,
+      "explanation_he": "ניכוי שווי שימוש ברכב — מקזז את התוספת לברוטו, לא משפיע על הנטו בפועל",
+      "typical_range_pct_of_gross": [0.0, 0.25]
+    }
+  },
+  "field_registry": {
+    "period_month": {
+      "label_he": "חודש שכר",
+      "section": "period",
+      "help_he": "החודש שעבורו משולם השכר"
+    },
+    "period_year": {
+      "label_he": "שנת שכר",
+      "section": "period",
+      "help_he": "השנה שעבורה משולם השכר"
+    },
+    "salary_type": {
+      "label_he": "סוג שכר",
+      "section": "employment",
+      "help_he": "חודשי (גלובלי) או שעתי"
+    },
+    "base_salary_or_rate": {
+      "label_he": "שכר בסיס",
+      "section": "employment",
+      "help_he": "שכר בסיס חודשי או שכר לשעה"
+    },
+    "regular_hours_worked": {
+      "label_he": "שעות עבודה רגילות",
+      "section": "employment",
+      "help_he": "מספר שעות עבודה רגילות בחודש"
+    },
+    "job_percent": {
+      "label_he": "אחוז משרה",
+      "section": "employment",
+      "help_he": "אחוז משרה (100% = משרה מלאה)"
+    },
+    "pension_expected": {
+      "label_he": "הפרשת פנסיה",
+      "section": "benefits",
+      "help_he": "האם צפויה הפרשה לפנסיה"
+    },
+    "training_fund_expected": {
+      "label_he": "קרן השתלמות",
+      "section": "benefits",
+      "help_he": "האם צפויה הפרשה לקרן השתלמות"
+    },
+    "employer_name": {
+      "label_he": "שם מעסיק",
+      "section": "employer",
+      "help_he": "שם החברה או המעסיק"
+    },
+    "employee_name": {
+      "label_he": "שם עובד",
+      "section": "employee",
+      "help_he": "שם העובד כפי שמופיע בתלוש"
+    },
+    "gross": {
+      "label_he": "שכר ברוטו",
+      "section": "totals",
+      "help_he": "סך כל ההכנסות לפני ניכויים"
+    },
+    "net": {
+      "label_he": "שכר נטו",
+      "section": "totals",
+      "help_he": "הסכום שמועבר בפועל לחשבון הבנק"
+    },
+    "total_deductions": {
+      "label_he": "סה\"כ ניכויים",
+      "section": "totals",
+      "help_he": "סך כל הניכויים (מס, ביטוח לאומי, פנסיה וכו')"
+    }
+  }
+}

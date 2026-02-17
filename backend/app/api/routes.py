@@ -7,13 +7,14 @@ import time
 
 from fastapi import APIRouter, Depends, Request, UploadFile
 
+from ..data.glossary import get_field_info
 from ..models.api_contracts import (
     AnalyzeRequest,
     AnalyzeResponse,
     ParseResponse,
     RequiredFieldStatus,
 )
-from ..models.payslip import Payslip
+from ..models.payslip import ConfirmationHint, Payslip
 from ..security.pii_masking import mask_pii
 from ..security.rate_limiter import rate_limiter
 from ..services.explanations import generate_explanations
@@ -128,6 +129,26 @@ async def parse_payslip(
         ]
         if missing_required:
             logger.info("Missing required fields for confirmation: %s", missing_required)
+
+        # Build confirmation hints with Hebrew labels from glossary
+        hints: list[ConfirmationHint] = []
+        for field_key in payslip.meta.needs_user_confirmation_fields:
+            fi = get_field_info(field_key)
+            hints.append(ConfirmationHint(
+                field_key=field_key,
+                label_he=fi.label_he if fi else field_key,
+                help_he=fi.help_he if fi else None,
+            ))
+        # Also add hints for required fields not extracted
+        for field_key in missing_required:
+            if field_key not in {h.field_key for h in hints}:
+                fi = get_field_info(field_key)
+                hints.append(ConfirmationHint(
+                    field_key=field_key,
+                    label_he=fi.label_he if fi else field_key,
+                    help_he=fi.help_he if fi else None,
+                ))
+        payslip.meta.confirmation_hints = hints
 
         # Update LLM extraction method label
         method = f"{method}+llm"
