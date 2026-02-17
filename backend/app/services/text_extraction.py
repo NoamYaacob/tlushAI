@@ -45,13 +45,54 @@ class ExtractionResult:
 def extract_text(file_path: Path, content_type: str) -> ExtractionResult:
     """
     Main entry point: extract text from a PDF or image file.
-    Falls back to OCR when PDF text is insufficient.
+    For images (JPG/PNG): bypasses OCR entirely and loads the raw image
+    for direct LLM Vision extraction — far more accurate for Hebrew tables.
+    For PDFs: uses pdfplumber with RTL-aware strategies, falls back to OCR.
     """
     logger.info("Starting text extraction: file=%s content_type=%s", file_path.name, content_type)
     if content_type == "application/pdf":
         return _extract_from_pdf(file_path)
     else:
-        return _extract_from_image(file_path)
+        # Images bypass OCR — send directly to LLM Vision
+        return _load_image_for_vision(file_path)
+
+
+# ---------------------------------------------------------------------------
+# Image → LLM Vision (bypass OCR)
+# ---------------------------------------------------------------------------
+
+def _load_image_for_vision(file_path: Path) -> ExtractionResult:
+    """
+    Load an image file and return its bytes for LLM Vision extraction.
+    Does NOT run OCR — the LLM's Vision capability handles Hebrew tables
+    far better than pytesseract.
+    """
+    warnings: list[str] = []
+    page_image_bytes: list[bytes] = []
+
+    try:
+        from PIL import Image
+
+        img = Image.open(file_path)
+        buf = io.BytesIO()
+        # Convert to PNG for consistent LLM Vision input
+        img.save(buf, format="PNG")
+        page_image_bytes.append(buf.getvalue())
+        logger.info(
+            "Image loaded for Vision: %s size=%dx%d",
+            file_path.name, img.width, img.height,
+        )
+    except Exception as exc:
+        msg = f"Cannot open image: {exc}"
+        logger.error(msg)
+        warnings.append(msg)
+
+    return ExtractionResult(
+        raw_text="[Image uploaded — text extraction delegated to LLM Vision]",
+        method="vision",
+        page_images=page_image_bytes,
+        warnings=warnings,
+    )
 
 
 # ---------------------------------------------------------------------------

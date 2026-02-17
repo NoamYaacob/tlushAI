@@ -1,4 +1,4 @@
-"""Unit tests for text extraction helpers (Hebrew detection, RTL, OCR preprocessing)."""
+"""Unit tests for text extraction helpers (Hebrew detection, RTL, OCR preprocessing, Vision)."""
 
 import pytest
 
@@ -6,7 +6,9 @@ from app.services.text_extraction import (
     _fix_reversed_hebrew,
     _has_sufficient_hebrew,
     _hebrew_char_ratio,
+    _load_image_for_vision,
     _reconstruct_rtl_lines,
+    extract_text,
 )
 
 
@@ -141,3 +143,67 @@ class TestPreprocessForOcr:
         img = Image.new("L", (50, 50), color=128)
         result = _preprocess_for_ocr(img)
         assert result.mode == "L"
+
+
+# ---------------------------------------------------------------------------
+# Vision bypass (image → LLM Vision, no OCR)
+# ---------------------------------------------------------------------------
+
+class TestLoadImageForVision:
+    def test_loads_png_image(self, tmp_path):
+        from PIL import Image
+
+        img = Image.new("RGB", (200, 300), color="white")
+        path = tmp_path / "payslip.png"
+        img.save(path, format="PNG")
+
+        result = _load_image_for_vision(path)
+        assert result.method == "vision"
+        assert len(result.page_images) == 1
+        assert len(result.page_images[0]) > 0
+        assert "Vision" in result.raw_text
+        assert len(result.warnings) == 0
+
+    def test_loads_jpeg_image(self, tmp_path):
+        from PIL import Image
+
+        img = Image.new("RGB", (100, 100), color="red")
+        path = tmp_path / "payslip.jpg"
+        img.save(path, format="JPEG")
+
+        result = _load_image_for_vision(path)
+        assert result.method == "vision"
+        assert len(result.page_images) == 1
+
+    def test_invalid_file_warns(self, tmp_path):
+        path = tmp_path / "bad.png"
+        path.write_bytes(b"not an image")
+
+        result = _load_image_for_vision(path)
+        assert result.method == "vision"
+        assert len(result.page_images) == 0
+        assert len(result.warnings) == 1
+        assert "Cannot open image" in result.warnings[0]
+
+
+class TestExtractTextVision:
+    def test_image_content_type_uses_vision(self, tmp_path):
+        from PIL import Image
+
+        img = Image.new("RGB", (100, 100), color="blue")
+        path = tmp_path / "test.jpg"
+        img.save(path, format="JPEG")
+
+        result = extract_text(path, "image/jpeg")
+        assert result.method == "vision"
+        assert len(result.page_images) == 1
+
+    def test_png_content_type_uses_vision(self, tmp_path):
+        from PIL import Image
+
+        img = Image.new("RGB", (100, 100), color="green")
+        path = tmp_path / "test.png"
+        img.save(path, format="PNG")
+
+        result = extract_text(path, "image/png")
+        assert result.method == "vision"

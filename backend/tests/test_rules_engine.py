@@ -1,4 +1,4 @@
-"""Unit tests for the rules engine — all 10 Israel-specific checks."""
+"""Unit tests for the rules engine — all 13 Israel-specific checks."""
 
 import json
 from pathlib import Path
@@ -14,7 +14,12 @@ from app.models.payslip import (
     Payslip,
     SalaryType,
 )
-from app.services.rules_engine import run_rules
+from app.services.rules_engine import (
+    calc_health_tax,
+    calc_income_tax,
+    calc_national_insurance,
+    run_rules,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -519,3 +524,210 @@ class TestFixtureIntegration:
         c = _confirmed(base_salary_or_rate=45000.0)
         flags = run_rules(p, c)
         assert len([f for f in flags if f.severity in (FlagSeverity.warn, FlagSeverity.high)]) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Calculation helpers
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestCalcIncomeTax:
+    def test_zero_income(self):
+        assert calc_income_tax(0) == 0.0
+
+    def test_negative_income(self):
+        assert calc_income_tax(-1000) == 0.0
+
+    def test_low_income_covered_by_credits(self):
+        # Low income where credit points fully cover the tax
+        # 2.25 * 242 = 544.50 credit benefit
+        # 3000 * 0.10 = 300 tax → 300 - 544.50 = max(0, -244.5) = 0
+        assert calc_income_tax(3000) == 0.0
+
+    def test_first_bracket(self):
+        # 7,310 * 10% = 731 - 544.50 credits = 186.50
+        assert abs(calc_income_tax(7_310) - 186.50) < 0.01
+
+    def test_second_bracket(self):
+        # 10,480: 731 + 3,170*0.14=443.80 = 1,174.80 - 544.50 = 630.30
+        assert abs(calc_income_tax(10_480) - 630.30) < 0.01
+
+    def test_high_income(self):
+        # 50,000: compute step by step
+        tax = (
+            7_310 * 0.10
+            + (10_480 - 7_310) * 0.14
+            + (19_000 - 10_480) * 0.20
+            + (25_101 - 19_000) * 0.31
+            + (41_410 - 25_101) * 0.35
+            + (50_000 - 41_410) * 0.47
+        )
+        expected = max(tax - 2.25 * 242, 0)
+        assert abs(calc_income_tax(50_000) - expected) < 0.01
+
+    def test_custom_credit_points(self):
+        # Female resident: 2.75 credit points
+        tax_male = calc_income_tax(20_000, credit_points=2.25)
+        tax_female = calc_income_tax(20_000, credit_points=2.75)
+        assert tax_female < tax_male
+        assert abs(tax_male - tax_female - (0.5 * 242)) < 0.01
+
+
+class TestCalcNationalInsurance:
+    def test_zero_income(self):
+        assert calc_national_insurance(0) == 0.0
+
+    def test_below_threshold(self):
+        # 5,000 * 1.04% = 52.0
+        assert abs(calc_national_insurance(5_000) - 52.0) < 0.01
+
+    def test_at_threshold(self):
+        # 7,703 * 1.04% = 80.1112
+        assert abs(calc_national_insurance(7_703) - 80.11) < 0.01
+
+    def test_above_threshold(self):
+        # 15,000: 7,703*0.0104 + (15000-7703)*0.07 = 80.11 + 510.79 = 590.90
+        expected = 7_703 * 0.0104 + (15_000 - 7_703) * 0.07
+        assert abs(calc_national_insurance(15_000) - expected) < 0.01
+
+    def test_above_max_insurable(self):
+        # 60,000 (over max 51,910): capped at 51,910
+        capped = calc_national_insurance(60_000)
+        at_max = calc_national_insurance(51_910)
+        assert abs(capped - at_max) < 0.01
+
+
+class TestCalcHealthTax:
+    def test_zero_income(self):
+        assert calc_health_tax(0) == 0.0
+
+    def test_below_threshold(self):
+        # 5,000 * 3.23% = 161.50
+        assert abs(calc_health_tax(5_000) - 161.50) < 0.01
+
+    def test_above_threshold(self):
+        # 15,000: 7,703*0.0323 + (15000-7703)*0.0517
+        expected = 7_703 * 0.0323 + (15_000 - 7_703) * 0.0517
+        assert abs(calc_health_tax(15_000) - expected) < 0.01
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 11: Income tax bracket verification
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRule11IncomeTax:
+    def test_matching_tax_no_flag(self):
+        """Tax matches expected calculation within tolerance."""
+        gross = 10_000.0
+        expected_tax = calc_income_tax(gross)
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "income_tax", "label_he": "מס הכנסה", "amount": expected_tax},
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 300},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": 200},
+            ],
+            "totals": {"gross": gross, "net": gross - expected_tax - 500},
+        })
+        assert len(_flags_titled(run_rules(p, _confirmed(base_salary_or_rate=gross)), "מס הכנסה")) == 0
+
+    def test_large_tax_discrepancy_flags(self):
+        """Tax far from expected triggers info flag."""
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "income_tax", "label_he": "מס הכנסה", "amount": 100.0},
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 500},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": 300},
+            ],
+            "totals": {"gross": 20000, "net": 19100},
+        })
+        flags = _flags_titled(run_rules(p, _confirmed(base_salary_or_rate=20000)), "מס הכנסה")
+        assert len(flags) == 1
+        assert flags[0].severity == FlagSeverity.info
+
+    def test_no_tax_line_skips(self):
+        """When no income tax line exists, rule 11 should not flag (rule 9 handles it)."""
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 500},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": 300},
+            ],
+            "totals": {"gross": 15000, "net": 14200},
+        })
+        assert len(_flags_titled(run_rules(p, _confirmed()), "הפרש בחישוב מס הכנסה")) == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 12: National Insurance tiered calculation
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRule12NationalInsurance:
+    def test_matching_ni_no_flag(self):
+        gross = 15_000.0
+        expected_ni = calc_national_insurance(gross)
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1500},
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": expected_ni},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": 500},
+            ],
+            "totals": {"gross": gross, "net": gross - 2000 - expected_ni},
+        })
+        assert len(_flags_titled(run_rules(p, _confirmed(base_salary_or_rate=gross)), "ביטוח לאומי")) == 0
+
+    def test_large_ni_discrepancy_flags(self):
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1500},
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 50.0},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": 500},
+            ],
+            "totals": {"gross": 20000, "net": 17950},
+        })
+        flags = _flags_titled(run_rules(p, _confirmed(base_salary_or_rate=20000)), "ביטוח לאומי")
+        assert len(flags) == 1
+        assert flags[0].severity == FlagSeverity.info
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 13: Health tax tiered calculation
+# ═══════════════════════════════════════════════════════════════════════════
+
+class TestRule13HealthTax:
+    def test_matching_health_no_flag(self):
+        gross = 15_000.0
+        expected_health = calc_health_tax(gross)
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1500},
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 600},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": expected_health},
+            ],
+            "totals": {"gross": gross, "net": gross - 2100 - expected_health},
+        })
+        assert len(_flags_titled(run_rules(p, _confirmed(base_salary_or_rate=gross)), "בריאות")) == 0
+
+    def test_large_health_discrepancy_flags(self):
+        p = Payslip.model_validate({
+            "employer": {"name": "C"}, "employee": {"name": "E"},
+            "period": {"month": 1, "year": 2026},
+            "deductions_lines": [
+                {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1500},
+                {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 600},
+                {"label": "health_tax", "label_he": "מס בריאות", "amount": 10.0},
+            ],
+            "totals": {"gross": 20000, "net": 17890},
+        })
+        flags = _flags_titled(run_rules(p, _confirmed(base_salary_or_rate=20000)), "בריאות")
+        assert len(flags) == 1
+        assert flags[0].severity == FlagSeverity.info

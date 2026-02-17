@@ -1,7 +1,7 @@
 """
 Rules engine — Israel-specific payslip compliance checks.
 
-10 checks, each returning a list of Flag objects:
+13 checks, each returning a list of Flag objects:
  1. Required basics present
  2. Net sanity (gross - deductions ~ net)
  3. Pension lines
@@ -12,6 +12,9 @@ Rules engine — Israel-specific payslip compliance checks.
  8. Minimum wage
  9. Tax lines presence
 10. Unusually large expense reimbursements
+11. Income tax bracket verification (2026 brackets + credit points)
+12. National Insurance tiered calculation verification
+13. Health tax tiered calculation verification
 
 IMPORTANT: All results use conservative language ("possible issue",
 "requires verification"). The system does NOT claim legal certainty.
@@ -23,12 +26,23 @@ import logging
 from collections import Counter
 
 from ..config.constants import (
+    CREDIT_POINT_MONTHLY_VALUE,
+    DEFAULT_CREDIT_POINTS_MALE,
     EXPENSE_TO_BASE_WARN_RATIO,
+    HEALTH_EMPLOYEE_FULL_RATE,
+    HEALTH_EMPLOYEE_REDUCED_RATE,
     LEAVE_BALANCE_TOLERANCE,
     MINIMUM_WAGE_HOURLY,
     MINIMUM_WAGE_MONTHLY,
     NET_TOLERANCE_NIS,
+    NI_EMPLOYEE_FULL_RATE,
+    NI_EMPLOYEE_REDUCED_RATE,
+    NI_HEALTH_TOLERANCE_NIS,
+    NI_MAX_INSURABLE_MONTHLY,
+    NI_THRESHOLD_MONTHLY,
     STANDARD_MONTHLY_HOURS,
+    TAX_BRACKETS_MONTHLY,
+    TAX_TOLERANCE_NIS,
 )
 from ..models.api_contracts import UserConfirmedFields
 from ..models.payslip import Flag, FlagSeverity, Payslip, SalaryType
@@ -71,6 +85,9 @@ def run_rules(payslip: Payslip, confirmed: UserConfirmedFields) -> list[Flag]:
     flags.extend(_check_minimum_wage(payslip, confirmed))  # 8
     flags.extend(_check_tax_lines_present(payslip))        # 9
     flags.extend(_check_large_expenses(payslip, confirmed))# 10
+    flags.extend(_check_income_tax(payslip))               # 11
+    flags.extend(_check_national_insurance(payslip))        # 12
+    flags.extend(_check_health_tax(payslip))                # 13
     return flags
 
 
@@ -574,4 +591,216 @@ def _check_large_expenses(payslip: Payslip, confirmed: UserConfirmedFields) -> l
         evidence=f"Expenses: {total_exp:.2f}, Base: {monthly_base:.2f}, Ratio: {ratio:.2%}",
         suggested_next_step="בדוק שהחזרי ההוצאות מגובים בקבלות ואושרו כנדרש",
         confidence=0.45,
+    )]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Calculation helpers — Israeli tax, NI, health
+# ═══════════════════════════════════════════════════════════════════════════
+
+def calc_income_tax(
+    taxable_monthly: float,
+    credit_points: float = DEFAULT_CREDIT_POINTS_MALE,
+) -> float:
+    """
+    Calculate expected monthly income tax using 2026 brackets.
+    Subtracts credit-point benefit from the gross tax liability.
+    """
+    if taxable_monthly <= 0:
+        return 0.0
+    tax = 0.0
+    prev_bound = 0.0
+    for upper, rate in TAX_BRACKETS_MONTHLY:
+        if taxable_monthly <= prev_bound:
+            break
+        band = min(taxable_monthly, upper) - prev_bound
+        if band > 0:
+            tax += band * rate
+        prev_bound = upper
+
+    # Subtract credit-point benefit (cannot go below zero)
+    credit_benefit = credit_points * CREDIT_POINT_MONTHLY_VALUE
+    return max(tax - credit_benefit, 0.0)
+
+
+def calc_national_insurance(gross_monthly: float) -> float:
+    """
+    Calculate expected employee National Insurance contribution (2026).
+    Two tiers: reduced rate up to 60% of average wage, full rate above.
+    """
+    if gross_monthly <= 0:
+        return 0.0
+    capped = min(gross_monthly, NI_MAX_INSURABLE_MONTHLY)
+    if capped <= NI_THRESHOLD_MONTHLY:
+        return capped * NI_EMPLOYEE_REDUCED_RATE
+    return (
+        NI_THRESHOLD_MONTHLY * NI_EMPLOYEE_REDUCED_RATE
+        + (capped - NI_THRESHOLD_MONTHLY) * NI_EMPLOYEE_FULL_RATE
+    )
+
+
+def calc_health_tax(gross_monthly: float) -> float:
+    """
+    Calculate expected employee health tax contribution (2026).
+    Same tier structure as National Insurance.
+    """
+    if gross_monthly <= 0:
+        return 0.0
+    capped = min(gross_monthly, NI_MAX_INSURABLE_MONTHLY)
+    if capped <= NI_THRESHOLD_MONTHLY:
+        return capped * HEALTH_EMPLOYEE_REDUCED_RATE
+    return (
+        NI_THRESHOLD_MONTHLY * HEALTH_EMPLOYEE_REDUCED_RATE
+        + (capped - NI_THRESHOLD_MONTHLY) * HEALTH_EMPLOYEE_FULL_RATE
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 11 — Income tax bracket verification
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _check_income_tax(payslip: Payslip) -> list[Flag]:
+    """
+    Compare the income tax deducted on the payslip against the expected
+    amount from the 2026 tax brackets (with default credit points).
+    """
+    gross = payslip.totals.taxable_gross or payslip.totals.gross
+    if not gross or gross <= 0:
+        return []
+
+    # Find the actual income tax deduction
+    actual_tax: float | None = None
+    for d in payslip.deductions_lines:
+        lo = d.label.lower()
+        he = (d.label_he or "").strip()
+        if "income_tax" in lo or "מס הכנסה" in he:
+            actual_tax = d.amount
+            break
+
+    if actual_tax is None:
+        return []  # Rule 9 already flags missing tax lines
+
+    expected = calc_income_tax(gross)
+    diff = abs(actual_tax - expected)
+
+    if diff <= TAX_TOLERANCE_NIS:
+        return []
+
+    return [Flag(
+        severity=FlagSeverity.info,
+        title_he="הפרש בחישוב מס הכנסה",
+        explanation_he=(
+            f"מס הכנסה בתלוש: {actual_tax:,.2f} ₪. "
+            f"חישוב משוער לפי מדרגות 2026 (עם {DEFAULT_CREDIT_POINTS_MALE} "
+            f"נקודות זיכוי ✕ {CREDIT_POINT_MONTHLY_VALUE} ₪): "
+            f"{expected:,.2f} ₪ (הפרש: {diff:,.2f} ₪). "
+            "הפער יכול לנבוע מנקודות זיכוי נוספות, תיאום מס, "
+            "הכנסה ממעסיקים נוספים, או רכיבים פטורים. "
+            "מומלץ לבדוק תיאום מס ואישורי זיכוי."
+        ),
+        evidence=(
+            f"Gross: {gross:.2f}, Actual tax: {actual_tax:.2f}, "
+            f"Expected (default credits): {expected:.2f}, Diff: {diff:.2f}"
+        ),
+        suggested_next_step="בדוק אישור תיאום מס ונקודות זיכוי מול פקיד השומה",
+        confidence=0.55,
+    )]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 12 — National Insurance tiered calculation
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _check_national_insurance(payslip: Payslip) -> list[Flag]:
+    """
+    Verify National Insurance deduction against the tiered 2026 rates.
+    """
+    gross = payslip.totals.gross
+    if not gross or gross <= 0:
+        return []
+
+    actual_ni: float | None = None
+    for d in payslip.deductions_lines:
+        lo = d.label.lower()
+        he = (d.label_he or "").strip()
+        if "national_insurance" in lo or "ביטוח לאומי" in he:
+            actual_ni = d.amount
+            break
+
+    if actual_ni is None:
+        return []  # Rule 9 already flags missing NI
+
+    expected = calc_national_insurance(gross)
+    diff = abs(actual_ni - expected)
+
+    if diff <= NI_HEALTH_TOLERANCE_NIS:
+        return []
+
+    return [Flag(
+        severity=FlagSeverity.info,
+        title_he="הפרש בחישוב ביטוח לאומי",
+        explanation_he=(
+            f"ביטוח לאומי בתלוש: {actual_ni:,.2f} ₪. "
+            f"חישוב משוער לפי תעריפי 2026 "
+            f"({NI_EMPLOYEE_REDUCED_RATE:.2%} עד {NI_THRESHOLD_MONTHLY:,.0f} ₪, "
+            f"{NI_EMPLOYEE_FULL_RATE:.2%} מעל): {expected:,.2f} ₪ "
+            f"(הפרש: {diff:,.2f} ₪). "
+            "הפער יכול לנבוע מהכנסות נוספות, פטורים, "
+            "או בסיס שונה לחישוב. מומלץ לבדוק."
+        ),
+        evidence=(
+            f"Gross: {gross:.2f}, Actual NI: {actual_ni:.2f}, "
+            f"Expected: {expected:.2f}, Diff: {diff:.2f}"
+        ),
+        suggested_next_step="בדוק את בסיס החישוב לביטוח לאומי מול אישור ביטוח לאומי",
+        confidence=0.55,
+    )]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Rule 13 — Health tax tiered calculation
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _check_health_tax(payslip: Payslip) -> list[Flag]:
+    """
+    Verify health tax deduction against the tiered 2026 rates.
+    """
+    gross = payslip.totals.gross
+    if not gross or gross <= 0:
+        return []
+
+    actual_health: float | None = None
+    for d in payslip.deductions_lines:
+        lo = d.label.lower()
+        he = (d.label_he or "").strip()
+        if "health_tax" in lo or "מס בריאות" in he:
+            actual_health = d.amount
+            break
+
+    if actual_health is None:
+        return []  # Rule 9 already flags missing health tax
+
+    expected = calc_health_tax(gross)
+    diff = abs(actual_health - expected)
+
+    if diff <= NI_HEALTH_TOLERANCE_NIS:
+        return []
+
+    return [Flag(
+        severity=FlagSeverity.info,
+        title_he="הפרש בחישוב מס בריאות",
+        explanation_he=(
+            f"מס בריאות בתלוש: {actual_health:,.2f} ₪. "
+            f"חישוב משוער לפי תעריפי 2026 "
+            f"({HEALTH_EMPLOYEE_REDUCED_RATE:.2%} עד {NI_THRESHOLD_MONTHLY:,.0f} ₪, "
+            f"{HEALTH_EMPLOYEE_FULL_RATE:.2%} מעל): {expected:,.2f} ₪ "
+            f"(הפרש: {diff:,.2f} ₪). "
+            "הפער יכול לנבוע מבסיס שונה לחישוב או פטורים. מומלץ לבדוק."
+        ),
+        evidence=(
+            f"Gross: {gross:.2f}, Actual health: {actual_health:.2f}, "
+            f"Expected: {expected:.2f}, Diff: {diff:.2f}"
+        ),
+        suggested_next_step="בדוק את בסיס החישוב למס בריאות",
+        confidence=0.55,
     )]

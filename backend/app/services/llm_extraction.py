@@ -89,6 +89,12 @@ CRITICAL RULES:
     - Totals row: gross, total deductions, net
     Numbers in the same row as a label belong to that label.
 
+11. VISION MODE: If the user message contains an image of a payslip and the text says \
+    "[Image uploaded — text extraction delegated to LLM Vision]", extract ALL data \
+    directly from the image. Ignore the placeholder text. Read every visible number, \
+    label, and table cell in the image. Images are the primary source — they contain \
+    the actual payslip with Hebrew tables, numbers, and layout.
+
 OUTPUT: Return ONLY valid JSON matching the schema. No markdown, no explanation.\
 """
 
