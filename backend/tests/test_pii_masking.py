@@ -88,3 +88,69 @@ class TestFullPiiMasking:
     def test_no_pii(self):
         text = "שכר יסוד: 15,000 ₪"
         assert mask_pii(text) == text
+
+
+# ---------------------------------------------------------------------------
+# Israeli ID with Hebrew prefixes
+# ---------------------------------------------------------------------------
+
+class TestIsraeliIdWithPrefixes:
+    def test_tz_with_dots(self):
+        text = "ת.ז. 012345678"
+        result = mask_israeli_id(text)
+        assert "012345678" not in result
+        assert "01*****78" in result
+
+    def test_tz_without_final_dot(self):
+        text = "ת.ז 012345678"
+        result = mask_israeli_id(text)
+        assert "01*****78" in result
+
+    def test_tz_with_quotes(self):
+        text = 'ת"ז 012345678'
+        result = mask_israeli_id(text)
+        assert "01*****78" in result
+
+    def test_teudat_zehut_full(self):
+        text = "תעודת זהות 012345678"
+        result = mask_israeli_id(text)
+        assert "01*****78" in result
+
+    def test_tz_colon_space(self):
+        text = "ת.ז.: 012345678"
+        result = mask_israeli_id(text)
+        assert "01*****78" in result
+
+    def test_8digit_with_prefix(self):
+        """8-digit ID where leading zero was stripped."""
+        text = "ת.ז. 12345678"
+        result = mask_pii(text)
+        assert "12345678" not in result
+
+    def test_8digit_without_prefix_preserved(self):
+        """8-digit number without prefix should NOT be masked."""
+        text = "phone 12345678"
+        result = mask_israeli_id(text)
+        assert "12345678" in result  # should not be masked
+
+
+# ---------------------------------------------------------------------------
+# Bank account patterns
+# ---------------------------------------------------------------------------
+
+class TestBankAccountPatterns:
+    def test_with_snif_label(self):
+        text = "סניף 123 456 12345678"
+        result = mask_pii(text)
+        assert "12345678" not in result
+
+    def test_bank_with_dashes(self):
+        text = "בנק 12-345-12345678"
+        result = mask_pii(text)
+        assert "12345678" not in result
+
+    def test_unlabeled_with_separator(self):
+        """Bank account without label still works when separators present."""
+        text = "12-345-12345678"
+        result = mask_pii(text)
+        assert "12345678" not in result

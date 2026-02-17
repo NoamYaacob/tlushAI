@@ -1,0 +1,55 @@
+{
+  "employer": {"name": "מסעדת הים בע\"מ", "id": "520100000", "address": "תל אביב, רח' הירקון 50"},
+  "employee": {"name": "דוד אברהם", "id": null, "job_title": "מלצר"},
+  "period": {"month": 11, "year": 2025},
+  "payment_date": "2025-12-09",
+  "employment": {
+    "salary_type": "hourly",
+    "base_rate": 42.0,
+    "job_percent": null,
+    "hours_regular": 168.0,
+    "hours_overtime_125": 20.0,
+    "hours_overtime_150": null,
+    "weekend_hours": 12.0,
+    "holiday_hours": null
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר רגיל", "qty": 168, "rate": 42.0, "amount": 7056.0},
+    {"label": "overtime_125", "label_he": "שעות נוספות 125%", "qty": 20, "rate": 52.5, "amount": 1050.0},
+    {"label": "weekend_hours", "label_he": "שעות שבת", "qty": 12, "rate": 63.0, "amount": 756.0},
+    {"label": "recuperation", "label_he": "דמי הבראה", "qty": null, "rate": null, "amount": 420.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 250.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 340.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 230.0}
+  ],
+  "employer_contrib_lines": [],
+  "pension": {
+    "employee_tagmulim": null,
+    "employer_tagmulim": null,
+    "employer_pitzuyim": null,
+    "training_fund_employee": null,
+    "training_fund_employer": null
+  },
+  "leave": {
+    "vacation_open": 3.0,
+    "vacation_accrued": 0.83,
+    "vacation_used": 0.0,
+    "vacation_close": 3.83,
+    "sick_open": 5.0,
+    "sick_accrued": 1.5,
+    "sick_used": 0.0,
+    "sick_close": 6.5
+  },
+  "totals": {
+    "gross": 9282.0,
+    "taxable_gross": null,
+    "net": 8462.0,
+    "total_deductions": 820.0
+  },
+  "meta": {
+    "parse_warnings": ["Weekend hours found but no separate Shabbat rate line identified"],
+    "needs_user_confirmation_fields": ["pension_expected"]
+  }
+}

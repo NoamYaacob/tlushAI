@@ -1,0 +1,61 @@
+{
+  "employer": {"name": "חברת הייטק בע\"מ", "id": "513000000", "address": "הרצליה פיתוח, דרך השלום 7"},
+  "employee": {"name": "ישראל כהן", "id": "012345678", "job_title": "מהנדס תוכנה בכיר"},
+  "period": {"month": 1, "year": 2026},
+  "payment_date": "2026-02-10",
+  "employment": {
+    "salary_type": "monthly",
+    "base_rate": 25000.0,
+    "job_percent": 100.0,
+    "hours_regular": 182.0,
+    "hours_overtime_125": 8.0,
+    "hours_overtime_150": null,
+    "weekend_hours": null,
+    "holiday_hours": null
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר יסוד", "qty": 1, "rate": 25000.0, "amount": 25000.0},
+    {"label": "overtime_125", "label_he": "שעות נוספות 125%", "qty": 8, "rate": 171.70, "amount": 1373.63},
+    {"label": "travel_allowance", "label_he": "החזר נסיעות", "qty": 22, "rate": 22.60, "amount": 497.20},
+    {"label": "car_maintenance", "label_he": "אחזקת רכב", "qty": null, "rate": null, "amount": 2500.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 4250.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 1080.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 710.0},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 1500.0},
+    {"label": "training_fund_employee", "label_he": "קרן השתלמות עובד", "amount": 625.0}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 1625.0},
+    {"label": "severance_employer", "label_he": "פיצויים מעביד", "amount": 2083.33},
+    {"label": "training_fund_employer", "label_he": "קרן השתלמות מעביד", "amount": 1875.0}
+  ],
+  "pension": {
+    "employee_tagmulim": 1500.0,
+    "employer_tagmulim": 1625.0,
+    "employer_pitzuyim": 2083.33,
+    "training_fund_employee": 625.0,
+    "training_fund_employer": 1875.0
+  },
+  "leave": {
+    "vacation_open": 15.0,
+    "vacation_accrued": 1.5,
+    "vacation_used": 2.0,
+    "vacation_close": 14.5,
+    "sick_open": 30.0,
+    "sick_accrued": 1.5,
+    "sick_used": 0.0,
+    "sick_close": 31.5
+  },
+  "totals": {
+    "gross": 29370.83,
+    "taxable_gross": 26870.83,
+    "net": 21205.83,
+    "total_deductions": 8165.0
+  },
+  "meta": {
+    "parse_warnings": [],
+    "needs_user_confirmation_fields": []
+  }
+}

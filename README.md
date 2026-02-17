@@ -5,10 +5,12 @@ Upload an Israeli payslip (PDF or image), and TlushAI extracts the data, runs 10
 ## Features
 
 - **Upload PDF or image** — supports scanned payslips via Tesseract OCR (Hebrew + English)
-- **Structured extraction** — LLM-powered parsing of Israeli payslip formats (Claude, GPT-4o, or mock provider)
+- **RTL-aware extraction** — multi-strategy pdfplumber pipeline (table extraction, word-level RTL reconstruction, Hebrew reversal detection)
+- **Structured extraction** — LLM-powered parsing with few-shot examples from 3 Israeli payroll sectors (high-tech, public sector, small business)
 - **10 compliance checks** — minimum wage, pension contributions, overtime, travel allowance, and more
 - **Hebrew explanations** — line-by-line meanings and summary cards, all in Hebrew RTL
-- **Privacy-first** — uploaded files are deleted immediately after processing; PII is redacted from logs
+- **Privacy-first** — uploaded files are deleted immediately after processing; PII is redacted from logs (supports ת.ז., ת"ז, תעודת זהות prefixes)
+- **Diagnostic logging** — timing instrumentation, Hebrew ratio detection, field extraction counts, missing field alerts
 
 ## Quick Start (Docker)
 

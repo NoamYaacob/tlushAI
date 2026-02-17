@@ -1,0 +1,59 @@
+{
+  "employer": {"name": "משרד החינוך", "id": "500100000", "address": "ירושלים, רח' כנפי נשרים 15"},
+  "employee": {"name": "רחל לוי", "id": "987654321", "job_title": "מורה בכירה"},
+  "period": {"month": 12, "year": 2025},
+  "payment_date": "2026-01-09",
+  "employment": {
+    "salary_type": "monthly",
+    "base_rate": 12500.0,
+    "job_percent": 100.0,
+    "hours_regular": 182.0,
+    "hours_overtime_125": null,
+    "hours_overtime_150": null,
+    "weekend_hours": null,
+    "holiday_hours": null
+  },
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר משולב", "qty": 1, "rate": 12500.0, "amount": 12500.0},
+    {"label": "seniority", "label_he": "תוספת ותק", "qty": null, "rate": null, "amount": 800.0},
+    {"label": "education_bonus", "label_he": "גמול השתלמות", "qty": null, "rate": null, "amount": 500.0},
+    {"label": "travel_allowance", "label_he": "החזר נסיעות", "qty": 22, "rate": 22.60, "amount": 497.20}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1100.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 560.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 380.0},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 750.0}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 812.50},
+    {"label": "severance_employer", "label_he": "פיצויים מעביד", "amount": 1041.67}
+  ],
+  "pension": {
+    "employee_tagmulim": 750.0,
+    "employer_tagmulim": 812.50,
+    "employer_pitzuyim": 1041.67,
+    "training_fund_employee": null,
+    "training_fund_employer": null
+  },
+  "leave": {
+    "vacation_open": 8.0,
+    "vacation_accrued": 1.0,
+    "vacation_used": 3.0,
+    "vacation_close": 6.0,
+    "sick_open": 45.0,
+    "sick_accrued": 1.5,
+    "sick_used": 1.0,
+    "sick_close": 45.5
+  },
+  "totals": {
+    "gross": 14297.20,
+    "taxable_gross": 13800.0,
+    "net": 11507.20,
+    "total_deductions": 2790.0
+  },
+  "meta": {
+    "parse_warnings": [],
+    "needs_user_confirmation_fields": []
+  }
+}

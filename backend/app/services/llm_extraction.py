@@ -12,8 +12,11 @@ handling RTL Hebrew text and Israeli numeric formats.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
+import re
+import time
 from abc import ABC, abstractmethod
 
 from ..config.settings import ANTHROPIC_API_KEY, LLM_PROVIDER, OPENAI_API_KEY
@@ -53,11 +56,38 @@ CRITICAL RULES:
    - מחלה = sick leave
    - ברוטו = gross
    - נטו = net
+   - דמי הבראה = recuperation pay
+   - פרמיה = bonus/premium
+   - ביגוד = clothing allowance
+   - אחזקת רכב = car maintenance
+   - דמי כלכלה = meal allowance
 5. If a field cannot be confidently determined, set it to null and add the field \
    name to meta.needs_user_confirmation_fields.
 6. If multiple interpretations exist, pick the most common one and add a warning \
    to meta.parse_warnings.
 7. Populate ALL fields you can find. Leave as null only when truly absent.
+8. HEBREW TEXT REVERSAL: pdfplumber and OCR frequently output Hebrew text reversed \
+   (character-by-character or word-by-word). If you see garbled Hebrew, try reading \
+   it backwards. For example, "דוסי רכש" is actually "שכר יסוד" (base salary) reversed. \
+   Common reversed patterns:
+   - "וטורב" → "ברוטו" (gross)
+   - "וטנ" → "נטו" (net)
+   - "הסנכה סמ" → "מס הכנסה" (income tax)
+   - "ימואל חוטיב" → "ביטוח לאומי" (national insurance)
+   Always try both reading directions for Hebrew segments.
+9. HEBREW DATE FORMATS: Israeli payslips use various date formats:
+   - Month names: ינואר, פברואר, מרץ, אפריל, מאי, יוני, יולי, אוגוסט, ספטמבר, אוקטובר, נובמבר, דצמבר
+   - Formats: "ינואר 2026", "01/2026", "2026-01", "01.2026", "חודש 01 שנת 2026", "תקופה: 01/2026"
+   - Extract month (1-12) and year (4 digits) from any format.
+10. COMMON ISRAELI PAYSLIP LAYOUT: Israeli payslips typically have these sections:
+    - Header: employer name, employee name, ID numbers, period
+    - Employment details: salary type, job %, seniority date
+    - Earnings table (right side): base salary, overtime, allowances
+    - Deductions table (left/center): taxes, pension employee, health
+    - Employer contributions (sometimes separate section): pension employer, severance, training fund
+    - Leave balances (bottom): vacation and sick leave open/accrued/used/close
+    - Totals row: gross, total deductions, net
+    Numbers in the same row as a label belong to that label.
 
 OUTPUT: Return ONLY valid JSON matching the schema. No markdown, no explanation.\
 """
@@ -100,6 +130,113 @@ Expected JSON schema (abbreviated):
 }\
 """
 
+# ---------------------------------------------------------------------------
+# Few-shot examples for better extraction accuracy
+# ---------------------------------------------------------------------------
+
+_FEW_SHOT_EXAMPLES = """\
+
+EXAMPLES — Below are three correctly parsed Israeli payslips from different sectors. \
+Use these as reference for field mapping and structure.
+
+EXAMPLE 1 — High-tech monthly salary:
+Input snippet: "חברת הייטק בע\"מ | ישראל כהן ת.ז. 012345678 | ינואר 2026 | \
+שכר יסוד 25,000 | שעות נוספות 125% 2,061 | החזר נסיעות 500 | \
+ברוטו 27,561 | מס הכנסה 4,200 | ביטוח לאומי 1,050 | מס בריאות 690 | \
+תגמולים עובד 1,500 | קרן השתלמות עובד 625 | נטו 19,496 | \
+תגמולים מעביד 1,625 | פיצויים 2,083.33 | קרן השתלמות מעביד 1,875"
+Output:
+{
+  "employer": {"name": "חברת הייטק בע\\"מ", "id": null, "address": null},
+  "employee": {"name": "ישראל כהן", "id": "012345678", "job_title": null},
+  "period": {"month": 1, "year": 2026},
+  "employment": {"salary_type": "monthly", "base_rate": 25000.0, "job_percent": 100.0, "hours_regular": 182.0, "hours_overtime_125": null, "hours_overtime_150": null, "weekend_hours": null, "holiday_hours": null},
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר יסוד", "qty": 1, "rate": 25000.0, "amount": 25000.0},
+    {"label": "overtime_125", "label_he": "שעות נוספות 125%", "qty": null, "rate": null, "amount": 2061.0},
+    {"label": "travel_allowance", "label_he": "החזר נסיעות", "qty": null, "rate": null, "amount": 500.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 4200.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 1050.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 690.0},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 1500.0},
+    {"label": "training_fund_employee", "label_he": "קרן השתלמות עובד", "amount": 625.0}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 1625.0},
+    {"label": "severance_employer", "label_he": "פיצויים", "amount": 2083.33},
+    {"label": "training_fund_employer", "label_he": "קרן השתלמות מעביד", "amount": 1875.0}
+  ],
+  "pension": {"employee_tagmulim": 1500.0, "employer_tagmulim": 1625.0, "employer_pitzuyim": 2083.33, "training_fund_employee": 625.0, "training_fund_employer": 1875.0},
+  "totals": {"gross": 27561.0, "taxable_gross": null, "net": 19496.0, "total_deductions": 8065.0},
+  "meta": {"parse_warnings": [], "needs_user_confirmation_fields": []}
+}
+
+EXAMPLE 2 — Public sector monthly salary:
+Input snippet: "משרד החינוך | רחל לוי ת.ז. 987654321 | 12/2025 | \
+שכר משולב 12,500 | תוספת ותק 800 | גמול השתלמות 500 | החזר נסיעות 350 | \
+ברוטו 14,150 | מס הכנסה 1,100 | ביטוח לאומי 560 | מס בריאות 380 | \
+תגמולים עובד 750 | נטו 11,360 | \
+תגמולים מעביד 812.50 | פיצויים 1,041.67"
+Output:
+{
+  "employer": {"name": "משרד החינוך", "id": null, "address": null},
+  "employee": {"name": "רחל לוי", "id": "987654321", "job_title": null},
+  "period": {"month": 12, "year": 2025},
+  "employment": {"salary_type": "monthly", "base_rate": 12500.0, "job_percent": 100.0, "hours_regular": 182.0, "hours_overtime_125": null, "hours_overtime_150": null, "weekend_hours": null, "holiday_hours": null},
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר משולב", "qty": 1, "rate": 12500.0, "amount": 12500.0},
+    {"label": "seniority", "label_he": "תוספת ותק", "qty": null, "rate": null, "amount": 800.0},
+    {"label": "education_bonus", "label_he": "גמול השתלמות", "qty": null, "rate": null, "amount": 500.0},
+    {"label": "travel_allowance", "label_he": "החזר נסיעות", "qty": null, "rate": null, "amount": 350.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 1100.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 560.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 380.0},
+    {"label": "pension_employee", "label_he": "תגמולים עובד", "amount": 750.0}
+  ],
+  "employer_contrib_lines": [
+    {"label": "pension_employer", "label_he": "תגמולים מעביד", "amount": 812.50},
+    {"label": "severance_employer", "label_he": "פיצויים", "amount": 1041.67}
+  ],
+  "pension": {"employee_tagmulim": 750.0, "employer_tagmulim": 812.50, "employer_pitzuyim": 1041.67, "training_fund_employee": null, "training_fund_employer": null},
+  "totals": {"gross": 14150.0, "taxable_gross": null, "net": 11360.0, "total_deductions": 2790.0},
+  "meta": {"parse_warnings": [], "needs_user_confirmation_fields": []}
+}
+
+EXAMPLE 3 — Small business hourly worker:
+Input snippet: "מסעדת הים בע\"מ | דוד אברהם | שעתי 42.00 ₪ | 11/2025 | \
+שכר רגיל 168 שעות 7,056 | שעות נוספות 125% 20 שעות 1,050 | \
+דמי הבראה 420 | ברוטו 8,526 | מס הכנסה 250 | ביטוח לאומי 340 | \
+מס בריאות 230 | נטו 7,706"
+Output:
+{
+  "employer": {"name": "מסעדת הים בע\\"מ", "id": null, "address": null},
+  "employee": {"name": "דוד אברהם", "id": null, "job_title": null},
+  "period": {"month": 11, "year": 2025},
+  "employment": {"salary_type": "hourly", "base_rate": 42.0, "job_percent": null, "hours_regular": 168.0, "hours_overtime_125": 20.0, "hours_overtime_150": null, "weekend_hours": null, "holiday_hours": null},
+  "earnings_lines": [
+    {"label": "base_salary", "label_he": "שכר רגיל", "qty": 168, "rate": 42.0, "amount": 7056.0},
+    {"label": "overtime_125", "label_he": "שעות נוספות 125%", "qty": 20, "rate": 52.5, "amount": 1050.0},
+    {"label": "recuperation", "label_he": "דמי הבראה", "qty": null, "rate": null, "amount": 420.0}
+  ],
+  "deductions_lines": [
+    {"label": "income_tax", "label_he": "מס הכנסה", "amount": 250.0},
+    {"label": "national_insurance", "label_he": "ביטוח לאומי", "amount": 340.0},
+    {"label": "health_tax", "label_he": "מס בריאות", "amount": 230.0}
+  ],
+  "employer_contrib_lines": [],
+  "pension": {"employee_tagmulim": null, "employer_tagmulim": null, "employer_pitzuyim": null, "training_fund_employee": null, "training_fund_employer": null},
+  "totals": {"gross": 8526.0, "taxable_gross": null, "net": 7706.0, "total_deductions": 820.0},
+  "meta": {"parse_warnings": [], "needs_user_confirmation_fields": ["pension_expected"]}
+}\
+"""
+
+# Regex for cleaning LLM JSON output
+_TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
+
 
 # ---------------------------------------------------------------------------
 # Abstract base
@@ -118,23 +255,43 @@ class LLMExtractor(ABC):
 
     def _parse_llm_json(self, raw_json: str) -> Payslip:
         """Parse LLM output JSON into a Payslip, handling common issues."""
-        # Strip markdown fences if present
         cleaned = raw_json.strip()
+
+        # Strip markdown fences if present
         if cleaned.startswith("```"):
             lines = cleaned.split("\n")
-            # Remove first and last fence lines
             lines = [l for l in lines if not l.strip().startswith("```")]
             cleaned = "\n".join(lines)
+
+        # Extract JSON between first { and last }
+        first_brace = cleaned.find("{")
+        last_brace = cleaned.rfind("}")
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            cleaned = cleaned[first_brace : last_brace + 1]
+
+        # Fix common JSON issues from LLMs
+        cleaned = _TRAILING_COMMA_RE.sub(r"\1", cleaned)
+        cleaned = cleaned.replace(": NaN", ": null").replace(": Infinity", ": null")
+
+        logger.debug("LLM JSON response: %d chars after cleanup", len(cleaned))
 
         try:
             data = json.loads(cleaned)
         except json.JSONDecodeError as exc:
-            logger.error("LLM returned invalid JSON: %s", exc)
+            logger.error(
+                "LLM returned invalid JSON: %s (first 200 chars: %s)",
+                exc,
+                cleaned[:200],
+            )
             payslip = Payslip()
             payslip.meta.parse_warnings.append(
                 f"LLM extraction returned invalid JSON: {exc}"
             )
             return payslip
+
+        # Log extracted top-level fields
+        found_fields = [k for k, v in data.items() if v is not None]
+        logger.info("LLM extracted fields: %s", found_fields)
 
         try:
             return Payslip.model_validate(data)
@@ -159,8 +316,30 @@ class MockExtractor(LLMExtractor):
         raw_text: str,
         page_images: list[bytes] | None = None,
     ) -> Payslip:
-        logger.info("MockExtractor: returning fixture payslip (text length=%d)", len(raw_text))
-        return Payslip.model_validate(_MOCK_PAYSLIP_DATA)
+        logger.info(
+            "MockExtractor: returning fixture payslip (text_length=%d, has_images=%s)",
+            len(raw_text),
+            bool(page_images),
+        )
+        data = copy.deepcopy(_MOCK_PAYSLIP_DATA)
+
+        # Adjust fixture based on input text content
+        if "שעתי" in raw_text or "hourly" in raw_text.lower():
+            data["employment"] = {
+                **data["employment"],
+                "salary_type": "hourly",
+                "base_rate": 55.0,
+            }
+
+        payslip = Payslip.model_validate(data)
+
+        # Warn if text is very short (likely extraction issues)
+        if len(raw_text) < 100:
+            payslip.meta.parse_warnings.append(
+                "Input text is very short — extraction may be incomplete"
+            )
+
+        return payslip
 
 
 _MOCK_PAYSLIP_DATA = {
@@ -244,6 +423,13 @@ class ClaudeExtractor(LLMExtractor):
     ) -> Payslip:
         import httpx
 
+        t_start = time.monotonic()
+        logger.info(
+            "ClaudeExtractor: starting extraction (text_length=%d, images=%d)",
+            len(raw_text),
+            len(page_images) if page_images else 0,
+        )
+
         messages_content: list[dict] = []
 
         # Add images if available (vision)
@@ -261,7 +447,7 @@ class ClaudeExtractor(LLMExtractor):
 
         messages_content.append({
             "type": "text",
-            "text": f"Raw extracted text:\n\n{raw_text}\n\n{EXTRACTION_SCHEMA_HINT}",
+            "text": f"Raw extracted text:\n\n{raw_text}\n\n{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}",
         })
 
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -283,6 +469,12 @@ class ClaudeExtractor(LLMExtractor):
             data = resp.json()
 
         raw_json = data["content"][0]["text"]
+        elapsed = time.monotonic() - t_start
+        logger.info(
+            "ClaudeExtractor: response received in %.2fs (response_chars=%d)",
+            elapsed,
+            len(raw_json),
+        )
         return self._parse_llm_json(raw_json)
 
 
@@ -304,6 +496,13 @@ class OpenAIExtractor(LLMExtractor):
     ) -> Payslip:
         import httpx
 
+        t_start = time.monotonic()
+        logger.info(
+            "OpenAIExtractor: starting extraction (text_length=%d, images=%d)",
+            len(raw_text),
+            len(page_images) if page_images else 0,
+        )
+
         messages_content: list[dict] = []
 
         if page_images:
@@ -317,7 +516,7 @@ class OpenAIExtractor(LLMExtractor):
 
         messages_content.append({
             "type": "text",
-            "text": f"Raw extracted text:\n\n{raw_text}\n\n{EXTRACTION_SCHEMA_HINT}",
+            "text": f"Raw extracted text:\n\n{raw_text}\n\n{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}",
         })
 
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -340,6 +539,12 @@ class OpenAIExtractor(LLMExtractor):
             data = resp.json()
 
         raw_json = data["choices"][0]["message"]["content"]
+        elapsed = time.monotonic() - t_start
+        logger.info(
+            "OpenAIExtractor: response received in %.2fs (response_chars=%d)",
+            elapsed,
+            len(raw_json),
+        )
         return self._parse_llm_json(raw_json)
 
 

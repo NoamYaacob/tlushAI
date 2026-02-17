@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends, Request, UploadFile
 
@@ -12,6 +13,7 @@ from ..models.api_contracts import (
     ParseResponse,
     RequiredFieldStatus,
 )
+from ..models.payslip import Payslip
 from ..security.pii_masking import mask_pii
 from ..security.rate_limiter import rate_limiter
 from ..services.explanations import generate_explanations
@@ -27,6 +29,33 @@ router = APIRouter()
 
 def _rate_limit(request: Request) -> None:
     rate_limiter.check(request)
+
+
+def _count_populated_fields(payslip: Payslip) -> int:
+    """Count how many key payslip fields have non-null values."""
+    count = 0
+    if payslip.employer.name:
+        count += 1
+    if payslip.employee.name:
+        count += 1
+    if payslip.period.month is not None:
+        count += 1
+    if payslip.period.year is not None:
+        count += 1
+    if payslip.totals.gross is not None:
+        count += 1
+    if payslip.totals.net is not None:
+        count += 1
+    if payslip.employment.salary_type is not None:
+        count += 1
+    if payslip.employment.base_rate is not None:
+        count += 1
+    count += len(payslip.earnings_lines)
+    count += len(payslip.deductions_lines)
+    return count
+
+
+_TOTAL_CORE_FIELDS = 10  # core trackable fields before line items
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +86,9 @@ async def parse_payslip(
 
     try:
         # 2. Extract text
+        t_start = time.monotonic()
         extraction = extract_text(upload.file_path, upload.content_type)
+        t_text = time.monotonic()
         method = extraction.method
 
         # 3. LLM-based structured extraction
@@ -66,6 +97,7 @@ async def parse_payslip(
             raw_text=extraction.raw_text,
             page_images=extraction.page_images or None,
         )
+        t_llm = time.monotonic()
 
         # Merge extraction warnings
         payslip.meta.parse_warnings.extend(extraction.warnings)
@@ -82,21 +114,42 @@ async def parse_payslip(
             or payslip.pension.employer_tagmulim is not None,
         )
 
+        # Log missing required fields
+        missing_required = [
+            name
+            for name, present in [
+                ("period_month", required_status.period_month),
+                ("period_year", required_status.period_year),
+                ("salary_type", required_status.salary_type),
+                ("base_rate", required_status.base_salary_or_rate),
+                ("hours_regular", required_status.regular_hours_worked),
+            ]
+            if not present
+        ]
+        if missing_required:
+            logger.info("Missing required fields for confirmation: %s", missing_required)
+
         # Update LLM extraction method label
-        if method in ("pdf_text", "pdf_text_partial_ocr"):
-            method = f"{method}+llm"
-        else:
-            method = f"{method}+llm"
+        method = f"{method}+llm"
 
         # 5. Redact PII for the preview (raw text stays for frontend display but IDs masked)
         redacted_preview = mask_pii(extraction.raw_text)
 
-        # Log only anonymized metrics — never raw text
+        # Log anonymized metrics with timing
+        fields_found = _count_populated_fields(payslip)
         logger.info(
-            "Parse complete: method=%s lines=%d warnings=%d hash=%s",
+            "Parse complete: method=%s text_chars=%d lines=%d "
+            "fields_found=%d/%d warnings=%d "
+            "text_extraction_ms=%d llm_extraction_ms=%d total_ms=%d hash=%s",
             method,
+            len(extraction.raw_text),
             len(extraction.raw_text.splitlines()),
+            fields_found,
+            _TOTAL_CORE_FIELDS,
             len(payslip.meta.parse_warnings),
+            int((t_text - t_start) * 1000),
+            int((t_llm - t_text) * 1000),
+            int((time.monotonic() - t_start) * 1000),
             upload.file_hash[:12],
         )
 
