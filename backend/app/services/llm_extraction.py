@@ -95,27 +95,36 @@ CRITICAL RULES:
     label, and table cell in the image. Images are the primary source — they contain \
     the actual payslip with Hebrew tables, numbers, and layout.
 
-12. EARNINGS TABLE — ROW-BY-ROW EXTRACTION (CRITICAL):
-    Israeli payslips have an earnings table (תשלומים) with columns typically named:
-    - תיאור (description) — the Hebrew label for the line item
-    - כמות / ימים / שעות (quantity / days / hours)
-    - תעריף / ערך (rate / value per unit)
-    - סכום / סה"כ (total amount)
-    You MUST extract EVERY row from this table as a separate earnings_line entry.
+12. RTL TABLE COLUMN ORDER (CRITICAL — READ THIS FIRST):
+    Israeli payslips are RIGHT-TO-LEFT documents. The earnings table (תשלומים) \
+    columns read from RIGHT to LEFT in this exact order:
+      [תיאור / Description] → [כמות / Qty/Hours] → [תעריף / Rate] → [סכום / Total]
+    The RIGHT-MOST data column (closest to the description) is QUANTITY (hours/days). \
+    The MIDDLE data column is the RATE (per-hour/per-day price). \
+    The LEFT-MOST data column is the TOTAL AMOUNT (qty × rate). \
+    DO NOT swap Quantity and Rate. If you see three numbers in a row like \
+    "שכר רגיל 100%   51.00   83.75   4,271.25", then: qty=51.00, rate=83.75, amount=4271.25. \
+    VERIFY: qty × rate should approximately equal amount. If it doesn't, you swapped them.
+
+13. EARNINGS TABLE — ROW-BY-ROW EXTRACTION (CRITICAL):
+    You MUST extract EVERY row from the earnings table as a separate earnings_line entry.
     For each row:
     a) Copy the EXACT Hebrew description into label_he (do NOT translate, guess, or summarize).
     b) Map it to a standard English label if you recognize it; otherwise use a descriptive \
        English slug (e.g., "shift_bonus", "seniority", "clothing_allowance").
-    c) Put the quantity column value (hours, days, units) into "qty".
-    d) Put the rate column value (per-hour, per-day, per-unit) into "rate".
-    e) Put the total amount column value into "amount".
+    c) Put the quantity column value (hours, days, units) into "qty" — this is the \
+       RIGHT-MOST number column (see Rule 12).
+    d) Put the rate column value (per-hour, per-day, per-unit) into "rate" — this is \
+       the MIDDLE number column (see Rule 12).
+    e) Put the total amount column value into "amount" — this is the LEFT-MOST number \
+       column (see Rule 12).
     f) If "qty" or "rate" is blank or missing for a row, set them to null — but still \
        extract the description and amount.
     DO NOT combine multiple rows into one. DO NOT invent rows that don't exist. \
     DO NOT put a non-monetary value (like "12 days") into the "amount" field — \
     days/hours go into "qty", monetary totals go into "amount".
 
-13. HOURLY PAYSLIPS WITH MULTIPLE RATE TIERS:
+14. HOURLY PAYSLIPS WITH MULTIPLE RATE TIERS:
     Hourly payslips often show multiple rows at different rates (100%, 125%, 150%, 175%, 200%).
     - Set employment.base_rate to the BASE hourly rate (the 100% rate).
     - Each rate tier should be its own earnings_line with the correct qty (hours), \
@@ -126,10 +135,16 @@ CRITICAL RULES:
     - Set employment.hours_regular from the 100% row quantity; hours_overtime_125 \
       from the 125% row quantity; hours_overtime_150 from the 150% row quantity.
 
-14. HEBREW TEXT ACCURACY: Copy Hebrew labels exactly as printed on the payslip. \
-    Do NOT hallucinate or guess Hebrew words. If a word is unclear, copy the closest \
-    readable characters and add a warning to meta.parse_warnings. Never invent \
-    Hebrew text that is not visible in the source.
+15. ZERO HALLUCINATION — EXACT HEBREW TRANSCRIPTION (CRITICAL):
+    Do NOT guess, autocomplete, or assume standard payslip component names. \
+    Read the exact Hebrew letters present in the image or text CHARACTER BY CHARACTER. \
+    - If the payslip says "נסיעות", output exactly "נסיעות" — do NOT output "נשפח" or any other guess.
+    - If the payslip says "ארוחות ע\"ח", output exactly that — do NOT invent "אחזקת רכב".
+    - If the payslip says "שווי ארוחות", output exactly "שווי ארוחות" — do NOT substitute similar-sounding words.
+    - If a word is genuinely unreadable, copy the best approximation AND add a warning \
+      to meta.parse_warnings explaining which label was unclear. \
+    NEVER output a Hebrew word that is not visible in the source. The user's payslip \
+    is the ground truth — not your knowledge of "typical" Israeli payslip components.
 
 OUTPUT: Return ONLY valid JSON matching the schema. No markdown, no explanation.\
 """
@@ -526,15 +541,24 @@ class ClaudeExtractor(LLMExtractor):
                 "No OCR text is available — extract ALL data directly from the image. "
                 "The image is your ONLY source of data.\n\n"
                 "CRITICAL INSTRUCTIONS FOR IMAGE EXTRACTION:\n"
-                "1. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW.\n"
-                "2. For each row, read the EXACT Hebrew description (תיאור), the quantity/hours "
+                "1. RTL COLUMN ORDER: The earnings table reads RIGHT to LEFT: "
+                "[תיאור/Description] → [כמות/Qty] → [תעריף/Rate] → [סכום/Total]. "
+                "The right-most number is QUANTITY (hours/days), the middle number is RATE, "
+                "the left-most number is TOTAL AMOUNT. DO NOT swap Qty and Rate. "
+                "VERIFY: qty × rate ≈ amount. If not, you swapped them — fix it.\n"
+                "2. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW.\n"
+                "3. For each row, read the EXACT Hebrew description (תיאור), the quantity/hours "
                 "(כמות/שעות), the rate/tariff (תעריף), and the total amount (סכום).\n"
-                "3. Copy the Hebrew description EXACTLY as printed — do NOT guess or paraphrase.\n"
-                "4. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n"
-                "5. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
+                "4. ZERO HALLUCINATION: Read Hebrew labels CHARACTER BY CHARACTER from the image. "
+                "Do NOT guess, autocomplete, or substitute 'typical' payslip terms. "
+                "If it says 'נסיעות', output 'נסיעות' — not 'נשפח'. "
+                "If it says 'ארוחות ע\"ח', output exactly that — not 'אחזקת רכב'. "
+                "If a word is unreadable, use your best approximation AND add a parse warning.\n"
+                "5. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n"
+                "6. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
                 "SEPARATE earnings_line for each tier row. Set employment.base_rate to the 100% rate.\n"
-                "6. Do the same for the DEDUCTIONS TABLE (ניכויים) and EMPLOYER CONTRIBUTIONS.\n"
-                "7. Read totals (gross/net) from the summary row at the bottom.\n\n"
+                "7. Do the same for the DEDUCTIONS TABLE (ניכויים) and EMPLOYER CONTRIBUTIONS.\n"
+                "8. Read totals (gross/net) from the summary row at the bottom.\n\n"
                 f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
             )
         else:
@@ -630,15 +654,24 @@ class OpenAIExtractor(LLMExtractor):
                 "No OCR text is available — extract ALL data directly from the image. "
                 "The image is your ONLY source of data.\n\n"
                 "CRITICAL INSTRUCTIONS FOR IMAGE EXTRACTION:\n"
-                "1. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW.\n"
-                "2. For each row, read the EXACT Hebrew description (תיאור), the quantity/hours "
+                "1. RTL COLUMN ORDER: The earnings table reads RIGHT to LEFT: "
+                "[תיאור/Description] → [כמות/Qty] → [תעריף/Rate] → [סכום/Total]. "
+                "The right-most number is QUANTITY (hours/days), the middle number is RATE, "
+                "the left-most number is TOTAL AMOUNT. DO NOT swap Qty and Rate. "
+                "VERIFY: qty × rate ≈ amount. If not, you swapped them — fix it.\n"
+                "2. Find the EARNINGS TABLE (תשלומים). Go through it ROW BY ROW.\n"
+                "3. For each row, read the EXACT Hebrew description (תיאור), the quantity/hours "
                 "(כמות/שעות), the rate/tariff (תעריף), and the total amount (סכום).\n"
-                "3. Copy the Hebrew description EXACTLY as printed — do NOT guess or paraphrase.\n"
-                "4. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n"
-                "5. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
+                "4. ZERO HALLUCINATION: Read Hebrew labels CHARACTER BY CHARACTER from the image. "
+                "Do NOT guess, autocomplete, or substitute 'typical' payslip terms. "
+                "If it says 'נסיעות', output 'נסיעות' — not 'נשפח'. "
+                "If it says 'ארוחות ע\"ח', output exactly that — not 'אחזקת רכב'. "
+                "If a word is unreadable, use your best approximation AND add a parse warning.\n"
+                "5. Non-monetary values (days, hours, units) go in 'qty', NOT in 'amount'.\n"
+                "6. For hourly payslips with multiple rate tiers (100%, 125%, 150%), create a "
                 "SEPARATE earnings_line for each tier row. Set employment.base_rate to the 100% rate.\n"
-                "6. Do the same for the DEDUCTIONS TABLE (ניכויים) and EMPLOYER CONTRIBUTIONS.\n"
-                "7. Read totals (gross/net) from the summary row at the bottom.\n\n"
+                "7. Do the same for the DEDUCTIONS TABLE (ניכויים) and EMPLOYER CONTRIBUTIONS.\n"
+                "8. Read totals (gross/net) from the summary row at the bottom.\n\n"
                 f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
             )
         else:
