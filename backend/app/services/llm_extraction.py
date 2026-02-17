@@ -170,7 +170,13 @@ CRITICAL RULES:
     a) Copy the EXACT Hebrew description (including any row code) into label_he.
     b) Map it to a standard English label if you recognize it; otherwise use a descriptive \
        English slug (e.g., "shift_bonus", "seniority", "clothing_allowance").
-    c) Assign qty, rate, and amount based on the column headers you identified.
+    c) STRICT HEADER-TO-FIELD MAPPING: The value under the column headed תעריף ALWAYS \
+       maps to the JSON "rate" field. The value under the column headed כמות ALWAYS maps \
+       to the JSON "qty" field. The value under סכום/סכום לתשלום ALWAYS maps to "amount". \
+       Do NOT swap them based on which number looks bigger or smaller. If the payslip \
+       shows תעריף=51.00 and כמות=83.75, then rate=51.00 and qty=83.75 — even if that \
+       means the rate is smaller than the quantity. The column HEADER is the authority, \
+       not your expectation of what "rate" or "hours" should look like.
     d) If "qty" or "rate" is blank or missing for a row, set them to null — but still \
        extract the description and amount.
     DO NOT combine multiple rows into one. DO NOT invent rows that don't exist. \
@@ -631,9 +637,13 @@ class ClaudeExtractor(LLMExtractor):
                 "line all the way to the far left to find the total amount. Intermediate columns "
                 "(תעריף, כמות) are between them on the same line. Do NOT let your eyes drift "
                 "up or down — numbers must come from the SAME printed line as the label.\n\n"
-                "c) HEADER-BASED COLUMNS: Read the column HEADER ROW first. The number under "
-                "the header כמות is qty. The number under תעריף is rate. The number under "
-                "סכום/סכום לתשלום is amount. Do NOT assume a fixed column order — it varies.\n\n"
+                "c) STRICT HEADER-TO-FIELD MAPPING: Read the column HEADER ROW first. "
+                "The number under the header כמות ALWAYS maps to JSON 'qty'. "
+                "The number under the header תעריף ALWAYS maps to JSON 'rate'. "
+                "The number under סכום/סכום לתשלום ALWAYS maps to JSON 'amount'. "
+                "Do NOT swap rate and qty based on which number looks bigger or smaller. "
+                "If תעריף=51.00 and כמות=83.75, then rate=51.00 and qty=83.75 — the column "
+                "HEADER is the authority, not your expectation of value magnitudes.\n\n"
                 "d) VERIFICATION: After each earnings row, write: "
                 "'CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗'. If ✗, you misaligned — fix it.\n\n"
                 "e) EARNINGS TOTAL: After all earnings rows, sum the amounts and compare to "
@@ -757,9 +767,13 @@ class OpenAIExtractor(LLMExtractor):
                 "line all the way to the far left to find the total amount. Intermediate columns "
                 "(תעריף, כמות) are between them on the same line. Do NOT let your eyes drift "
                 "up or down — numbers must come from the SAME printed line as the label.\n\n"
-                "c) HEADER-BASED COLUMNS: Read the column HEADER ROW first. The number under "
-                "the header כמות is qty. The number under תעריף is rate. The number under "
-                "סכום/סכום לתשלום is amount. Do NOT assume a fixed column order — it varies.\n\n"
+                "c) STRICT HEADER-TO-FIELD MAPPING: Read the column HEADER ROW first. "
+                "The number under the header כמות ALWAYS maps to JSON 'qty'. "
+                "The number under the header תעריף ALWAYS maps to JSON 'rate'. "
+                "The number under סכום/סכום לתשלום ALWAYS maps to JSON 'amount'. "
+                "Do NOT swap rate and qty based on which number looks bigger or smaller. "
+                "If תעריף=51.00 and כמות=83.75, then rate=51.00 and qty=83.75 — the column "
+                "HEADER is the authority, not your expectation of value magnitudes.\n\n"
                 "d) VERIFICATION: After each earnings row, write: "
                 "'CHECK: {qty} × {rate} = {result} ≈ {amount} ✓/✗'. If ✗, you misaligned — fix it.\n\n"
                 "e) EARNINGS TOTAL: After all earnings rows, sum the amounts and compare to "
