@@ -442,7 +442,7 @@ class LLMExtractor(ABC):
         logger.info("LLM extracted fields: %s", found_fields)
 
         try:
-            return Payslip.model_validate(data)
+            payslip = Payslip.model_validate(data)
         except Exception as exc:
             logger.error("LLM JSON failed schema validation: %s", exc)
             payslip = Payslip()
@@ -450,6 +450,95 @@ class LLMExtractor(ABC):
                 f"LLM output failed schema validation: {exc}"
             )
             return payslip
+
+        return self._fix_rate_qty_swap(payslip)
+
+    @staticmethod
+    def _fix_rate_qty_swap(payslip: Payslip) -> Payslip:
+        """Detect and fix systematic rate↔qty swap in earnings_lines and employment.
+
+        Some payroll layouts (e.g., Tzevet 3) have column orders that cause the
+        LLM to consistently put the תעריף (rate) value into the qty field and
+        the כמות (qty) value into the rate field.
+
+        Detection: if a base-salary line and an overtime line (125%/150%) both
+        have qty and rate, check whether the qty fields follow the overtime
+        multiplier pattern (qty_125 ≈ 1.25 × qty_base).  If they do, the qty
+        fields actually contain rates → swap all qty↔rate.
+        """
+        if not payslip.earnings_lines:
+            return payslip
+
+        # Find base salary line and overtime lines with both qty and rate
+        base_line = None
+        overtime_entries: list[tuple[float, int]] = []  # (multiplier, index)
+        for i, line in enumerate(payslip.earnings_lines):
+            if line.qty is None or line.rate is None:
+                continue
+            combined = f"{line.label_he or ''} {line.label}"
+            if line.label == "base_salary" or "משכורת" in combined or "שכר רגיל" in combined:
+                base_line = line
+            elif "125" in combined:
+                overtime_entries.append((1.25, i))
+            elif "150" in combined:
+                overtime_entries.append((1.50, i))
+
+        if base_line is None or not overtime_entries:
+            return payslip
+
+        swap_needed = False
+        for multiplier, idx in overtime_entries:
+            ot_line = payslip.earnings_lines[idx]
+            # Check if qty fields contain the tier ratio (swap scenario)
+            if base_line.qty and base_line.qty > 0:
+                ratio_qty = ot_line.qty / base_line.qty
+                if abs(ratio_qty - multiplier) < 0.02:
+                    swap_needed = True
+                    break
+            # Check if rate fields contain the tier ratio (correct scenario)
+            if base_line.rate and base_line.rate > 0:
+                ratio_rate = ot_line.rate / base_line.rate
+                if abs(ratio_rate - multiplier) < 0.02:
+                    swap_needed = False
+                    break
+
+        if not swap_needed:
+            return payslip
+
+        logger.warning(
+            "Detected rate↔qty column swap (base_line qty=%.2f, rate=%.2f) "
+            "— auto-correcting all earnings_lines and employment fields",
+            base_line.qty,
+            base_line.rate,
+        )
+
+        # Swap qty↔rate in all earnings_lines that have both
+        for line in payslip.earnings_lines:
+            if line.qty is not None and line.rate is not None:
+                line.qty, line.rate = line.rate, line.qty
+
+        # Swap employment.base_rate ↔ hours_regular
+        if payslip.employment.base_rate is not None and payslip.employment.hours_regular is not None:
+            payslip.employment.base_rate, payslip.employment.hours_regular = (
+                payslip.employment.hours_regular,
+                payslip.employment.base_rate,
+            )
+
+        # Re-derive overtime hours from the now-corrected earnings_lines
+        for line in payslip.earnings_lines:
+            if line.qty is None:
+                continue
+            combined = f"{line.label_he or ''} {line.label}"
+            if "125" in combined:
+                payslip.employment.hours_overtime_125 = line.qty
+            elif "150" in combined:
+                payslip.employment.hours_overtime_150 = line.qty
+
+        payslip.meta.parse_warnings.append(
+            "Auto-corrected: rate and qty fields were swapped "
+            "(detected via overtime tier ratio)"
+        )
+        return payslip
 
 
 # ---------------------------------------------------------------------------
