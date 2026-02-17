@@ -240,6 +240,9 @@ Output:
 }\
 """
 
+# Marker text set by text_extraction.py when an image bypasses OCR
+_VISION_PLACEHOLDER = "[Image uploaded — text extraction delegated to LLM Vision]"
+
 # Regex for cleaning LLM JSON output
 _TRAILING_COMMA_RE = re.compile(r",\s*([}\]])")
 
@@ -339,8 +342,22 @@ class MockExtractor(LLMExtractor):
 
         payslip = Payslip.model_validate(data)
 
-        # Warn if text is very short (likely extraction issues)
-        if len(raw_text) < 100:
+        # IMPORTANT: MockExtractor cannot process images — warn prominently
+        if page_images:
+            logger.warning(
+                "MockExtractor: %d image(s) provided but MOCK mode cannot "
+                "process images. Set LLM_PROVIDER=claude or LLM_PROVIDER=openai "
+                "with the corresponding API key to enable Vision extraction.",
+                len(page_images),
+            )
+            payslip.meta.parse_warnings.append(
+                "⚠ LLM_PROVIDER=mock — images cannot be processed. "
+                "The data shown is DEMO data, not from your payslip. "
+                "Set LLM_PROVIDER=claude (with ANTHROPIC_API_KEY) or "
+                "LLM_PROVIDER=openai (with OPENAI_API_KEY) in backend/.env "
+                "to enable Vision-based extraction from images."
+            )
+        elif len(raw_text) < 100:
             payslip.meta.parse_warnings.append(
                 "Input text is very short — extraction may be incomplete"
             )
@@ -418,7 +435,7 @@ _MOCK_PAYSLIP_DATA = {
 class ClaudeExtractor(LLMExtractor):
     """Extract payslip data using Anthropic Claude API."""
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
         self._api_key = api_key
         self._model = model
 
@@ -427,36 +444,59 @@ class ClaudeExtractor(LLMExtractor):
         raw_text: str,
         page_images: list[bytes] | None = None,
     ) -> Payslip:
+        import base64
+
         import httpx
+
+        vision_only = bool(page_images) and _VISION_PLACEHOLDER in raw_text
 
         t_start = time.monotonic()
         logger.info(
-            "ClaudeExtractor: starting extraction (text_length=%d, images=%d)",
+            "ClaudeExtractor: starting extraction (model=%s, text_length=%d, "
+            "images=%d, vision_only=%s)",
+            self._model,
             len(raw_text),
             len(page_images) if page_images else 0,
+            vision_only,
         )
 
         messages_content: list[dict] = []
 
-        # Add images if available (vision)
+        # Add images if available (vision) — images FIRST so the model sees them
         if page_images:
-            import base64
-            for img_bytes in page_images[:3]:  # limit to first 3 pages
+            for i, img_bytes in enumerate(page_images[:3]):  # limit to 3 pages
+                b64_data = base64.b64encode(img_bytes).decode()
                 messages_content.append({
                     "type": "image",
                     "source": {
                         "type": "base64",
                         "media_type": "image/png",
-                        "data": base64.b64encode(img_bytes).decode(),
+                        "data": b64_data,
                     },
                 })
+                logger.info(
+                    "ClaudeExtractor: attached image %d (%d bytes, %d b64 chars)",
+                    i + 1, len(img_bytes), len(b64_data),
+                )
 
-        messages_content.append({
-            "type": "text",
-            "text": f"Raw extracted text:\n\n{raw_text}\n\n{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}",
-        })
+        # Build the text prompt — different for vision-only vs text+images
+        if vision_only:
+            text_prompt = (
+                "The above image is a photograph of an Israeli payslip (תלוש שכר). "
+                "No OCR text is available — extract ALL data directly from the image. "
+                "Read every visible number, label, table cell, and Hebrew text in the image. "
+                "The image is your ONLY source of data.\n\n"
+                f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
+            )
+        else:
+            text_prompt = (
+                f"Raw extracted text:\n\n{raw_text}\n\n"
+                f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
+            )
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        messages_content.append({"type": "text", "text": text_prompt})
+
+        async with httpx.AsyncClient(timeout=90.0) as client:
             resp = await client.post(
                 "https://api.anthropic.com/v1/messages",
                 headers={
@@ -500,32 +540,58 @@ class OpenAIExtractor(LLMExtractor):
         raw_text: str,
         page_images: list[bytes] | None = None,
     ) -> Payslip:
+        import base64
+
         import httpx
+
+        vision_only = bool(page_images) and _VISION_PLACEHOLDER in raw_text
 
         t_start = time.monotonic()
         logger.info(
-            "OpenAIExtractor: starting extraction (text_length=%d, images=%d)",
+            "OpenAIExtractor: starting extraction (model=%s, text_length=%d, "
+            "images=%d, vision_only=%s)",
+            self._model,
             len(raw_text),
             len(page_images) if page_images else 0,
+            vision_only,
         )
 
         messages_content: list[dict] = []
 
+        # Add images — images FIRST so the model sees them
         if page_images:
-            import base64
-            for img_bytes in page_images[:3]:
+            for i, img_bytes in enumerate(page_images[:3]):
                 b64 = base64.b64encode(img_bytes).decode()
                 messages_content.append({
                     "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{b64}"},
+                    "image_url": {
+                        "url": f"data:image/png;base64,{b64}",
+                        "detail": "high",
+                    },
                 })
+                logger.info(
+                    "OpenAIExtractor: attached image %d (%d bytes)",
+                    i + 1, len(img_bytes),
+                )
 
-        messages_content.append({
-            "type": "text",
-            "text": f"Raw extracted text:\n\n{raw_text}\n\n{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}",
-        })
+        # Build the text prompt — different for vision-only vs text+images
+        if vision_only:
+            text_prompt = (
+                "The above image is a photograph of an Israeli payslip (תלוש שכר). "
+                "No OCR text is available — extract ALL data directly from the image. "
+                "Read every visible number, label, table cell, and Hebrew text in the image. "
+                "The image is your ONLY source of data.\n\n"
+                f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
+            )
+        else:
+            text_prompt = (
+                f"Raw extracted text:\n\n{raw_text}\n\n"
+                f"{EXTRACTION_SCHEMA_HINT}\n\n{_FEW_SHOT_EXAMPLES}"
+            )
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        messages_content.append({"type": "text", "text": text_prompt})
+
+        async with httpx.AsyncClient(timeout=90.0) as client:
             resp = await client.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
@@ -563,10 +629,17 @@ def get_extractor() -> LLMExtractor:
     if LLM_PROVIDER == "claude":
         if not ANTHROPIC_API_KEY:
             raise RuntimeError("ANTHROPIC_API_KEY not set but LLM_PROVIDER=claude")
+        logger.info("LLM provider: claude (Vision-capable)")
         return ClaudeExtractor(api_key=ANTHROPIC_API_KEY)
     elif LLM_PROVIDER == "openai":
         if not OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY not set but LLM_PROVIDER=openai")
+        logger.info("LLM provider: openai (Vision-capable)")
         return OpenAIExtractor(api_key=OPENAI_API_KEY)
     else:
+        logger.warning(
+            "LLM provider: MOCK (LLM_PROVIDER=%r) — images will NOT be processed. "
+            "Set LLM_PROVIDER=claude or openai in .env for real extraction.",
+            LLM_PROVIDER,
+        )
         return MockExtractor()

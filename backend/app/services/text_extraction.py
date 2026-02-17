@@ -87,8 +87,10 @@ def _load_image_for_vision(file_path: Path) -> ExtractionResult:
         logger.error(msg)
         warnings.append(msg)
 
+    from .llm_extraction import _VISION_PLACEHOLDER
+
     return ExtractionResult(
-        raw_text="[Image uploaded — text extraction delegated to LLM Vision]",
+        raw_text=_VISION_PLACEHOLDER,
         method="vision",
         page_images=page_image_bytes,
         warnings=warnings,

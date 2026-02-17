@@ -2,6 +2,7 @@
 
 import pytest
 
+from app.services.llm_extraction import _VISION_PLACEHOLDER
 from app.services.text_extraction import (
     _fix_reversed_hebrew,
     _has_sufficient_hebrew,
@@ -161,7 +162,7 @@ class TestLoadImageForVision:
         assert result.method == "vision"
         assert len(result.page_images) == 1
         assert len(result.page_images[0]) > 0
-        assert "Vision" in result.raw_text
+        assert result.raw_text == _VISION_PLACEHOLDER
         assert len(result.warnings) == 0
 
     def test_loads_jpeg_image(self, tmp_path):

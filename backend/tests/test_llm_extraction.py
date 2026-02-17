@@ -77,6 +77,24 @@ class TestMockExtractor:
         assert any("very short" in w for w in result.meta.parse_warnings)
 
     @pytest.mark.asyncio
+    async def test_image_warning_tells_user_to_switch_provider(self):
+        ext = MockExtractor()
+        fake_image = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        result = await ext.extract("some text", page_images=[fake_image])
+        assert any("LLM_PROVIDER=mock" in w for w in result.meta.parse_warnings)
+        assert any("DEMO data" in w for w in result.meta.parse_warnings)
+
+    @pytest.mark.asyncio
+    async def test_image_warning_not_short_text_warning(self):
+        """When images are provided, show the provider warning, not 'very short'."""
+        ext = MockExtractor()
+        from app.services.llm_extraction import _VISION_PLACEHOLDER
+        fake_image = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+        result = await ext.extract(_VISION_PLACEHOLDER, page_images=[fake_image])
+        assert not any("very short" in w for w in result.meta.parse_warnings)
+        assert any("LLM_PROVIDER=mock" in w for w in result.meta.parse_warnings)
+
+    @pytest.mark.asyncio
     async def test_hourly_keyword_hebrew(self):
         ext = MockExtractor()
         result = await ext.extract("שכר שעתי 55 ₪ לשעה")
