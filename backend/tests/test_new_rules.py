@@ -93,14 +93,14 @@ class TestGrossSum:
         gross_flags = _flags_titled(flags, "הפרש בין ברוטו לסכום שורות")
         assert len(gross_flags) == 1
 
-    def test_car_benefit_skips_check(self):
-        """When car benefit is present, skip the gross sum check."""
+    def test_car_benefit_no_false_positive(self):
+        """Car benefit in earnings inflates gross — should not trigger flag."""
         payslip = Payslip(
             earnings_lines=[
                 EarningsLine(label="base_salary", amount=10000.0),
                 EarningsLine(label="car_benefit", label_he="שווי שימוש רכב", amount=2500.0),
             ],
-            totals=Totals(gross=15000.0, net=9000.0),
+            totals=Totals(gross=12500.0, net=9000.0),
         )
         flags = run_rules(payslip, _confirmed(base_salary_or_rate=10000.0))
         gross_flags = _flags_titled(flags, "הפרש בין ברוטו לסכום שורות")

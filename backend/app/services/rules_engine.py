@@ -1,7 +1,7 @@
 """
 Rules engine — Israel-specific payslip compliance checks.
 
-13 checks, each returning a list of Flag objects:
+16 checks, each returning a list of Flag objects:
  1. Required basics present
  2. Net sanity (gross - deductions ~ net)
  3. Pension lines
@@ -15,6 +15,9 @@ Rules engine — Israel-specific payslip compliance checks.
 11. Income tax bracket verification (2026 brackets + credit points)
 12. National Insurance tiered calculation verification
 13. Health tax tiered calculation verification
+14. Gross = sum of earnings lines (benefit-in-kind aware)
+15. Employer contributions should not reduce net
+16. Car benefit (שווי שימוש רכב)
 
 IMPORTANT: All results use conservative language ("possible issue",
 "requires verification"). The system does NOT claim legal certainty.
@@ -818,7 +821,15 @@ def _check_health_tax(payslip: Payslip) -> list[Flag]:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _check_gross_sum(payslip: Payslip) -> list[Flag]:
-    """Verify that gross matches the sum of individual earnings lines."""
+    """Verify that gross matches the sum of individual earnings lines.
+
+    Benefits-in-kind (car benefit, meal value, phone benefit, etc.) appear
+    in earnings and inflate gross, but they also have matching deductions.
+    We tolerate them by checking both:
+      a) gross vs earnings_sum  (should match if all lines are captured)
+      b) if there's a mismatch, check whether benefit-in-kind lines can
+         explain the difference before flagging.
+    """
     gross = payslip.totals.gross
     if gross is None or not payslip.earnings_lines:
         return []
@@ -829,14 +840,35 @@ def _check_gross_sum(payslip: Payslip) -> list[Flag]:
     if diff <= NET_TOLERANCE_NIS:
         return []
 
-    # Car benefit inflates gross but is also deducted — skip this check
-    # if a car benefit line is present (it complicates the math).
-    car_kw = {"car_benefit", "שווי שימוש רכב", "שווי רכב", "רכב צמוד"}
-    has_car = any(
-        _label_matches_any(l.label, l.label_he, car_kw) for l in payslip.earnings_lines
-    )
-    if has_car:
-        return []
+    # Identify benefit-in-kind lines that may cause legitimate divergence
+    # between gross and earnings sum.  These items appear in both earnings
+    # and deductions and inflate the gross without affecting net.
+    benefit_kw = {
+        "car_benefit", "שווי שימוש רכב", "שווי רכב", "רכב צמוד", "גילום רכב",
+        "שווי שימוש טלפון", "שווי שימוש", "שווי ארוחות",
+    }
+    benefit_total = 0.0
+    for line in payslip.earnings_lines:
+        if _label_matches_any(line.label, line.label_he, benefit_kw):
+            benefit_total += line.amount
+
+    # If benefits can explain the difference, suppress the flag
+    if benefit_total > 0:
+        diff_after_benefits = abs(gross - earnings_sum + benefit_total)
+        diff_without_benefits = abs(gross - (earnings_sum - benefit_total))
+        if min(diff_after_benefits, diff_without_benefits, diff) <= NET_TOLERANCE_NIS:
+            return []
+        # Even if not exact, if benefit-in-kind explains most of the gap,
+        # lower confidence and use wider tolerance (50 NIS)
+        if min(diff_after_benefits, diff_without_benefits) <= 50.0:
+            return []
+
+    # If taxable_gross exists and matches earnings minus non-taxable items,
+    # that's also fine — the discrepancy is due to non-taxable components
+    if payslip.totals.taxable_gross is not None and payslip.totals.taxable_gross != gross:
+        taxable_diff = abs(payslip.totals.taxable_gross - earnings_sum)
+        if taxable_diff <= NET_TOLERANCE_NIS:
+            return []
 
     return [Flag(
         severity=FlagSeverity.info,
@@ -845,10 +877,12 @@ def _check_gross_sum(payslip: Payslip) -> list[Flag]:
             f"ברוטו בתלוש: {gross:,.2f} ₪, "
             f"סכום שורות הכנסה: {earnings_sum:,.2f} ₪ "
             f"(הפרש: {diff:,.2f} ₪). "
-            "ייתכן שחסרות שורות הכנסה בחילוץ, או שהברוטו כולל רכיבים נוספים."
+            "ייתכן שחסרות שורות הכנסה בחילוץ, או שהברוטו כולל רכיבים נוספים "
+            "(כגון שווי שימוש ברכב, ארוחות, טלפון)."
         ),
         evidence=(
             f"Gross: {gross:.2f}, Earnings sum: {earnings_sum:.2f}, Diff: {diff:.2f}"
+            + (f", Benefits-in-kind: {benefit_total:.2f}" if benefit_total > 0 else "")
         ),
         suggested_next_step="בדוק את כל שורות ההכנסה בתלוש המקורי",
         confidence=0.6,

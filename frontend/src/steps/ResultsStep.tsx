@@ -6,10 +6,22 @@ import type { Flag, FlagSeverity, LineExplanation, LineSection } from "@/types/p
 
 const SEVERITY_ORDER: FlagSeverity[] = ["high", "warn", "info"];
 
-const SEVERITY_STYLES: Record<FlagSeverity, { bg: string; border: string; icon: string; title: string }> = {
-  high: { bg: "bg-red-50", border: "border-red-300", icon: "\u26A0\uFE0F", title: "text-red-800" },
-  warn: { bg: "bg-amber-50", border: "border-amber-300", icon: "\u26A1", title: "text-amber-800" },
-  info: { bg: "bg-blue-50", border: "border-blue-300", icon: "\u2139\uFE0F", title: "text-blue-800" },
+const SEVERITY_STYLES: Record<FlagSeverity, {
+  bg: string; border: string; icon: string; title: string;
+  badge: string; badgeText: string; label: string;
+}> = {
+  high: {
+    bg: "bg-red-50", border: "border-red-300", icon: "\u26A0\uFE0F", title: "text-red-800",
+    badge: "bg-red-100 border-red-300", badgeText: "text-red-700", label: S.resultsSeverityHigh,
+  },
+  warn: {
+    bg: "bg-amber-50", border: "border-amber-300", icon: "\u26A1", title: "text-amber-800",
+    badge: "bg-amber-100 border-amber-300", badgeText: "text-amber-700", label: S.resultsSeverityWarn,
+  },
+  info: {
+    bg: "bg-blue-50", border: "border-blue-300", icon: "\u2139\uFE0F", title: "text-blue-800",
+    badge: "bg-blue-100 border-blue-300", badgeText: "text-blue-700", label: S.resultsSeverityInfo,
+  },
 };
 
 const SECTION_LABELS: Record<string, string> = {
@@ -38,20 +50,32 @@ function formatNIS(value: number | null | undefined): string {
 function FlagCard({ flag, showDebug }: { flag: Flag; showDebug: boolean }) {
   const style = SEVERITY_STYLES[flag.severity];
   return (
-    <div className={`rounded-lg border ${style.border} ${style.bg} p-4`}>
-      <div className="flex items-start gap-2">
-        <span className="text-lg">{style.icon}</span>
-        <div className="flex-1">
-          <h4 className={`font-semibold ${style.title}`}>{flag.title_he}</h4>
-          <p className="mt-1 text-sm text-gray-700">{flag.explanation_he}</p>
-          {showDebug && flag.evidence && (
-            <p className="mt-2 text-xs text-gray-500">
-              {S.debugEvidence} {flag.evidence}
+    <div className={`rounded-xl border ${style.border} ${style.bg} p-4`}>
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 text-lg leading-none">{style.icon}</span>
+        <div className="flex-1 min-w-0">
+          {/* Header row: title + severity badge */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className={`font-semibold ${style.title}`}>{flag.title_he}</h4>
+            <span className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium ${style.badge} ${style.badgeText}`}>
+              {style.label}
+            </span>
+          </div>
+
+          {/* Explanation — always visible, user-facing Hebrew */}
+          <p className="mt-1.5 text-sm leading-relaxed text-gray-700">{flag.explanation_he}</p>
+
+          {/* Next step — always visible, this is user advice */}
+          {flag.suggested_next_step && (
+            <p className="mt-2 text-xs font-medium text-gray-600">
+              {S.resultsWhatToDo} {flag.suggested_next_step}
             </p>
           )}
-          {flag.suggested_next_step && (
-            <p className="mt-1 text-xs font-medium text-gray-600">
-              {S.debugSuggestion} {flag.suggested_next_step}
+
+          {/* Evidence — debug only (contains English calculation strings) */}
+          {showDebug && flag.evidence && (
+            <p className="mt-2 rounded bg-gray-100 p-2 text-xs font-mono text-gray-500 break-all" dir="ltr">
+              {flag.evidence}
             </p>
           )}
         </div>
@@ -77,7 +101,7 @@ function SectionedLines({
         {SECTION_LABELS[section] ?? section}
       </h3>
       <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" dir="rtl">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50 text-gray-600">
               <th className="p-3 text-start font-medium">{S.tableLineLabel}</th>
@@ -89,7 +113,7 @@ function SectionedLines({
               )}
               <th className="p-3 text-start font-medium">{S.tableAmount}</th>
               <th className="p-3 text-start font-medium">{S.tableExplanation}</th>
-              <th className="p-3 text-start font-medium">{S.tableStatus}</th>
+              <th className="p-3 text-center font-medium">{S.tableStatus}</th>
             </tr>
           </thead>
           <tbody>
@@ -117,7 +141,7 @@ function SectionedLines({
                 )}
                 <td className="p-3 text-gray-700">{formatNIS(line.amount)}</td>
                 <td className="p-3 text-gray-600">{line.meaning_he}</td>
-                <td className="p-3">
+                <td className="p-3 text-center">
                   <span
                     className={`inline-block h-2.5 w-2.5 rounded-full ${
                       STATUS_DOT[line.status] ?? "bg-gray-400"
@@ -171,6 +195,11 @@ export function ResultsStep() {
   }
 
   function handleCopyText() {
+    const sevLabel: Record<string, string> = {
+      high: S.resultsSeverityHigh,
+      warn: S.resultsSeverityWarn,
+      info: S.resultsSeverityInfo,
+    };
     const textLines: string[] = [];
     textLines.push("=== " + S.resultsSummaryTitle + " ===");
     for (const card of result.summary_cards) {
@@ -180,8 +209,11 @@ export function ResultsStep() {
     if (result.flags.length > 0) {
       textLines.push("=== " + S.resultsFlagsTitle + ` (${result.flags.length}) ===`);
       for (const flag of result.flags) {
-        textLines.push(`[${flag.severity}] ${flag.title_he}`);
+        textLines.push(`[${sevLabel[flag.severity] ?? flag.severity}] ${flag.title_he}`);
         textLines.push(`  ${flag.explanation_he}`);
+        if (flag.suggested_next_step) {
+          textLines.push(`  ${S.resultsWhatToDo} ${flag.suggested_next_step}`);
+        }
       }
       textLines.push("");
     }
@@ -198,7 +230,7 @@ export function ResultsStep() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className="mx-auto max-w-3xl space-y-8" dir="rtl">
       {/* Summary cards */}
       <section>
         <h2 className="mb-3 text-lg font-semibold text-gray-800">{S.resultsSummaryTitle}</h2>

@@ -96,6 +96,24 @@ export const S = {
   footerDisclaimer: "TlushAI — כלי עזר להבנת תלוש השכר. אין להסתמך על התוצאות כייעוץ משפטי או חשבונאי.",
   footerPrivacy: "הקבצים נמחקים מיד לאחר העיבוד. המידע אינו נשמר בשרת.",
 
+  // Upload progress phases
+  uploadPhaseUploading: "מעלה את הקובץ...",
+  uploadPhaseExtracting: "מחלץ טקסט מהתלוש...",
+  uploadPhaseParsing: "מזהה נתוני שכר...",
+  uploadPhaseAlmost: "כמעט סיימנו...",
+  uploadTimeout: "הפעולה נמשכת זמן רב מהצפוי.",
+  uploadRetry: "נסה שוב",
+
+  // Confirm - hours field context
+  confirmHoursRequiredHourly: "נדרש לצורך בדיקת שכר מינימום",
+  confirmHoursOptionalMonthly: "אופציונלי — לחישוב שכר שעתי אפקטיבי",
+
+  // Results - severity labels for flag cards
+  resultsWhatToDo: "מה מומלץ לעשות:",
+  resultsSeverityHigh: "ממצא חשוב",
+  resultsSeverityWarn: "דורש בדיקה",
+  resultsSeverityInfo: "לידיעה",
+
   // Errors
   networkError: "אין חיבור לשרת. בדוק את החיבור לאינטרנט ונסה שוב.",
   validationError: "שגיאה בנתונים שנשלחו. בדוק את השדות ונסה שוב.",

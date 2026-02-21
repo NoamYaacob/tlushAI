@@ -4,6 +4,7 @@ import { analyzePayslip } from "@/lib/api";
 import { ErrorAlert } from "@/components/ErrorAlert";
 import { Spinner } from "@/components/Spinner";
 import { S } from "@/lib/strings";
+import { getFieldLabel } from "@/lib/fieldRegistry";
 import type { AppError, SalaryType, UserConfirmedFields } from "@/types/payslip";
 
 const HEBREW_MONTHS = [
@@ -48,12 +49,14 @@ export function ConfirmStep() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [showPreview, setShowPreview] = useState(false);
 
+  const isHourly = salaryType === "hourly";
+
   function validate(): FieldErrors {
     const errs: FieldErrors = {};
-    if (month < 1 || month > 12) errs.period_month = "יש לבחור חודש";
-    if (year < 2000 || year > 2100) errs.period_year = "שנה לא תקינה";
-    if (!salaryType) errs.salary_type = "יש לבחור סוג שכר";
-    if (!baseRate || baseRate <= 0) errs.base_salary_or_rate = "יש להזין שכר בסיס גדול מ-0";
+    if (month < 1 || month > 12) errs.period_month = S.errSelectMonth;
+    if (year < 2000 || year > 2100) errs.period_year = S.errInvalidYear;
+    if (!salaryType) errs.salary_type = S.errSelectSalaryType;
+    if (!baseRate || baseRate <= 0) errs.base_salary_or_rate = S.errBaseRateRequired;
     return errs;
   }
 
@@ -90,11 +93,24 @@ export function ConfirmStep() {
   }
 
   if (state.isLoading) {
-    return <Spinner message="מנתח את התלוש..." />;
+    return <Spinner message={S.analyzingSlip} />;
   }
 
   const warnings = payslip.meta.parse_warnings;
   const needsConfirmation = payslip.meta.needs_user_confirmation_fields;
+
+  // Build Hebrew labels for fields needing confirmation — never show internal keys
+  function getConfirmationLabels(): string {
+    const hints = payslip.meta.confirmation_hints ?? [];
+    if (hints.length > 0) {
+      const matched = hints
+        .filter((h) => needsConfirmation.includes(h.field_key))
+        .map((h) => h.label_he);
+      if (matched.length > 0) return matched.join(", ");
+    }
+    // Fallback: use field registry (frontend-side), never raw keys
+    return needsConfirmation.map(getFieldLabel).join(", ");
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -103,17 +119,14 @@ export function ConfirmStep() {
         onDismiss={() => dispatch({ type: "SET_ERROR", payload: null })}
       />
 
-      <h2 className="text-xl font-semibold text-gray-800">אימות נתונים שחולצו</h2>
-      <p className="text-sm text-gray-600">
-        בדוק את הנתונים שחולצו מהתלוש. שדות שלא זוהו אוטומטית מסומנים בצהוב.
-        יש לאשר או לתקן לפני המשך.
-      </p>
+      <h2 className="text-xl font-semibold text-gray-800">{S.confirmTitle}</h2>
+      <p className="text-sm text-gray-600">{S.confirmDescription}</p>
 
       {/* Parse warnings */}
       {warnings.length > 0 && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-          <p className="mb-1 text-sm font-medium text-amber-800">אזהרות חילוץ:</p>
-          <ul className="list-inside list-disc text-sm text-amber-700">
+          <p className="mb-1 text-sm font-medium text-amber-800">{S.confirmParseWarnings}</p>
+          <ul className="list-inside list-disc text-sm text-amber-700 ps-0">
             {warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
@@ -124,13 +137,7 @@ export function ConfirmStep() {
       {needsConfirmation.length > 0 && (
         <div className="rounded-lg border border-blue-300 bg-blue-50 p-3">
           <p className="text-sm text-blue-800">
-            {S.confirmFieldsNeedVerification}{" "}
-            {(payslip.meta.confirmation_hints ?? []).length > 0
-              ? payslip.meta.confirmation_hints
-                  .filter((h) => needsConfirmation.includes(h.field_key))
-                  .map((h) => h.label_he)
-                  .join(", ") || needsConfirmation.join(", ")
-              : needsConfirmation.join(", ")}
+            {S.confirmFieldsNeedVerification} {getConfirmationLabels()}
           </p>
         </div>
       )}
@@ -142,7 +149,7 @@ export function ConfirmStep() {
           onClick={() => setShowPreview(!showPreview)}
           className="text-sm text-blue-600 hover:text-blue-800 underline"
         >
-          {showPreview ? "הסתר תצוגה מקדימה" : "הצג טקסט שחולץ (מצונזר)"}
+          {showPreview ? S.confirmHidePreview : S.confirmShowPreview}
         </button>
         {showPreview && (
           <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-gray-100 p-3 text-xs leading-relaxed text-gray-700" dir="rtl">
@@ -155,13 +162,13 @@ export function ConfirmStep() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <fieldset className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
           <legend className="px-2 text-sm font-semibold text-gray-700">
-            שדות חובה
+            {S.confirmRequired}
           </legend>
 
           {/* Period month */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              חודש <span className="text-red-500">*</span>
+              {S.fieldMonth} <span className="text-red-500">*</span>
             </label>
             <select
               value={month}
@@ -172,7 +179,7 @@ export function ConfirmStep() {
                   : "border-gray-300"
               } ${errors.period_month ? "border-red-500" : ""}`}
             >
-              <option value={0}>-- בחר חודש --</option>
+              <option value={0}>{S.confirmSelectMonth}</option>
               {HEBREW_MONTHS.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
@@ -180,7 +187,7 @@ export function ConfirmStep() {
               ))}
             </select>
             {!status.period_month && (
-              <p className="mt-1 text-xs text-amber-600">לא זוהה אוטומטית</p>
+              <p className="mt-1 text-xs text-amber-600">{S.confirmFieldNotDetected}</p>
             )}
             {errors.period_month && (
               <p className="mt-1 text-xs text-red-600">{errors.period_month}</p>
@@ -190,7 +197,7 @@ export function ConfirmStep() {
           {/* Period year */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              שנה <span className="text-red-500">*</span>
+              {S.fieldYear} <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -205,7 +212,7 @@ export function ConfirmStep() {
               } ${errors.period_year ? "border-red-500" : ""}`}
             />
             {!status.period_year && (
-              <p className="mt-1 text-xs text-amber-600">לא זוהה אוטומטית</p>
+              <p className="mt-1 text-xs text-amber-600">{S.confirmFieldNotDetected}</p>
             )}
             {errors.period_year && (
               <p className="mt-1 text-xs text-red-600">{errors.period_year}</p>
@@ -215,7 +222,7 @@ export function ConfirmStep() {
           {/* Salary type */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              סוג שכר <span className="text-red-500">*</span>
+              {S.fieldSalaryType} <span className="text-red-500">*</span>
             </label>
             <div className="flex gap-6">
               <label className="flex items-center gap-2 text-sm">
@@ -226,7 +233,7 @@ export function ConfirmStep() {
                   checked={salaryType === "monthly"}
                   onChange={() => setSalaryType("monthly")}
                 />
-                חודשי
+                {S.confirmSalaryMonthly}
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -236,11 +243,11 @@ export function ConfirmStep() {
                   checked={salaryType === "hourly"}
                   onChange={() => setSalaryType("hourly")}
                 />
-                שעתי
+                {S.confirmSalaryHourly}
               </label>
             </div>
             {!status.salary_type && (
-              <p className="mt-1 text-xs text-amber-600">לא זוהה אוטומטית</p>
+              <p className="mt-1 text-xs text-amber-600">{S.confirmFieldNotDetected}</p>
             )}
             {errors.salary_type && (
               <p className="mt-1 text-xs text-red-600">{errors.salary_type}</p>
@@ -250,7 +257,7 @@ export function ConfirmStep() {
           {/* Base salary / rate */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              {salaryType === "hourly" ? "שכר שעתי" : "שכר בסיס חודשי"} (₪){" "}
+              {isHourly ? S.fieldBaseRateHourly : S.fieldBaseRateMonthly} (₪){" "}
               <span className="text-red-500">*</span>
             </label>
             <input
@@ -266,7 +273,7 @@ export function ConfirmStep() {
               placeholder="0.00"
             />
             {!status.base_salary_or_rate && (
-              <p className="mt-1 text-xs text-amber-600">לא זוהה אוטומטית</p>
+              <p className="mt-1 text-xs text-amber-600">{S.confirmFieldNotDetected}</p>
             )}
             {errors.base_salary_or_rate && (
               <p className="mt-1 text-xs text-red-600">{errors.base_salary_or_rate}</p>
@@ -276,13 +283,14 @@ export function ConfirmStep() {
 
         <fieldset className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
           <legend className="px-2 text-sm font-semibold text-gray-700">
-            שדות אופציונליים
+            {S.confirmOptional}
           </legend>
 
-          {/* Hours worked */}
+          {/* Hours worked — context-sensitive label */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              שעות עבודה רגילות
+              {S.fieldHoursWorked}
+              {isHourly && <span className="text-red-500"> *</span>}
             </label>
             <input
               type="number"
@@ -296,12 +304,15 @@ export function ConfirmStep() {
               }`}
               placeholder="182"
             />
+            <p className="mt-1 text-xs text-gray-500">
+              {isHourly ? S.confirmHoursRequiredHourly : S.confirmHoursOptionalMonthly}
+            </p>
           </div>
 
           {/* Job percent */}
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              אחוז משרה
+              {S.fieldJobPercent}
             </label>
             <input
               type="number"
@@ -327,7 +338,7 @@ export function ConfirmStep() {
               onChange={(e) => setPensionExpected(e.target.checked)}
               className="h-4 w-4 rounded"
             />
-            צפוי הפרשה לפנסיה
+            {S.confirmPensionExpected}
           </label>
 
           {/* Training fund expected */}
@@ -338,7 +349,7 @@ export function ConfirmStep() {
               onChange={(e) => setTrainingFundExpected(e.target.checked)}
               className="h-4 w-4 rounded"
             />
-            צפוי הפרשה לקרן השתלמות
+            {S.confirmTrainingFundExpected}
           </label>
         </fieldset>
 
@@ -347,14 +358,10 @@ export function ConfirmStep() {
             type="submit"
             className="rounded-xl bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-md transition-colors hover:bg-blue-700"
           >
-            המשך לתוצאות
+            {S.confirmSubmit}
           </button>
         </div>
       </form>
-
-      <p className="text-xs text-gray-400">
-        שיטת חילוץ: {parseResult.extraction_method}
-      </p>
     </div>
   );
 }
