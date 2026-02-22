@@ -35,15 +35,16 @@ export function ConfirmStep() {
   const payslip = parseResult.payslip;
   const status = parseResult.required_fields_status;
 
-  // Form state — pre-populated from extracted data
-  const [month, setMonth] = useState(payslip.period.month ?? 0);
-  const [year, setYear] = useState(payslip.period.year ?? new Date().getFullYear());
+  // Form state — pre-populated from extracted data.
+  // Use optional chaining on sub-objects in case backend omits them.
+  const [month, setMonth] = useState(payslip?.period?.month ?? 0);
+  const [year, setYear] = useState(payslip?.period?.year ?? new Date().getFullYear());
   const [salaryType, setSalaryType] = useState<SalaryType | "">(
-    payslip.employment.salary_type ?? ""
+    payslip?.employment?.salary_type ?? ""
   );
-  const [baseRate, setBaseRate] = useState(payslip.employment.base_rate ?? 0);
-  const [hoursWorked, setHoursWorked] = useState(payslip.employment.hours_regular ?? 0);
-  const [jobPercent, setJobPercent] = useState(payslip.employment.job_percent ?? 100);
+  const [baseRate, setBaseRate] = useState(payslip?.employment?.base_rate ?? 0);
+  const [hoursWorked, setHoursWorked] = useState(payslip?.employment?.hours_regular ?? 0);
+  const [jobPercent, setJobPercent] = useState(payslip?.employment?.job_percent ?? 100);
   const [pensionExpected, setPensionExpected] = useState(true);
   const [trainingFundExpected, setTrainingFundExpected] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -96,12 +97,12 @@ export function ConfirmStep() {
     return <Spinner message={S.analyzingSlip} />;
   }
 
-  const warnings = payslip.meta.parse_warnings;
-  const needsConfirmation = payslip.meta.needs_user_confirmation_fields;
+  const warnings = payslip?.meta?.parse_warnings ?? [];
+  const needsConfirmation = payslip?.meta?.needs_user_confirmation_fields ?? [];
 
   // Build Hebrew labels for fields needing confirmation — never show internal keys
   function getConfirmationLabels(): string {
-    const hints = payslip.meta.confirmation_hints ?? [];
+    const hints = payslip?.meta?.confirmation_hints ?? [];
     if (hints.length > 0) {
       const matched = hints
         .filter((h) => needsConfirmation.includes(h.field_key))

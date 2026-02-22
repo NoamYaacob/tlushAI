@@ -24,6 +24,8 @@ const SEVERITY_STYLES: Record<FlagSeverity, {
   },
 };
 
+const DEFAULT_STYLE = SEVERITY_STYLES.info;
+
 const SECTION_LABELS: Record<string, string> = {
   earnings: S.resultsEarningsSection,
   deductions: S.resultsDeductionsSection,
@@ -48,7 +50,7 @@ function formatNIS(value: number | null | undefined): string {
 }
 
 function FlagCard({ flag, showDebug }: { flag: Flag; showDebug: boolean }) {
-  const style = SEVERITY_STYLES[flag.severity];
+  const style = SEVERITY_STYLES[flag.severity] ?? DEFAULT_STYLE;
   return (
     <div className={`rounded-xl border ${style.border} ${style.bg} p-4`}>
       <div className="flex items-start gap-3">
@@ -93,7 +95,7 @@ function SectionedLines({
   section: string;
   hasQtyRate: boolean;
 }) {
-  if (lines.length === 0) return null;
+  if (!lines || lines.length === 0) return null;
 
   return (
     <div className="mb-4">
@@ -140,7 +142,7 @@ function SectionedLines({
                   </>
                 )}
                 <td className="p-3 text-gray-700">{formatNIS(line.amount)}</td>
-                <td className="p-3 text-gray-600">{line.meaning_he}</td>
+                <td className="p-3 text-gray-600">{line.meaning_he ?? ""}</td>
                 <td className="p-3 text-center">
                   <span
                     className={`inline-block h-2.5 w-2.5 rounded-full ${
@@ -160,12 +162,34 @@ function SectionedLines({
 export function ResultsStep() {
   const { state, dispatch } = useWizard();
   const { debugMode } = useDebug();
-  const result = state.analyzeResult!.result;
   const [copied, setCopied] = useState(false);
+
+  // Defensive: guard against missing or partial analyzeResult
+  const result = state.analyzeResult?.result;
+  if (!result) {
+    return (
+      <div className="mx-auto max-w-3xl py-12 text-center text-gray-500">
+        <p>{S.serverError}</p>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: "RESET" })}
+          className="mt-4 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-md transition-colors hover:bg-blue-700"
+        >
+          {S.resultsResetButton}
+        </button>
+      </div>
+    );
+  }
+
+  // Extract arrays with fallbacks — prevents WSOD when backend omits fields
+  const flags = result.flags ?? [];
+  const okItems = result.ok_items ?? [];
+  const lineExplanations = result.line_explanations ?? [];
+  const summaryCards = result.summary_cards ?? [];
 
   const groupedFlags = SEVERITY_ORDER.reduce<Record<FlagSeverity, Flag[]>>(
     (acc, sev) => {
-      acc[sev] = result.flags.filter((f) => f.severity === sev);
+      acc[sev] = flags.filter((f) => f.severity === sev);
       return acc;
     },
     { high: [], warn: [], info: [] }
@@ -174,13 +198,13 @@ export function ResultsStep() {
   // Group line explanations by section
   const sectionOrder: LineSection[] = ["earnings", "deductions", "tax", "employer_contributions"];
   const linesBySection: Record<string, LineExplanation[]> = {};
-  for (const line of result.line_explanations) {
+  for (const line of lineExplanations) {
     const sec = line.section ?? "earnings";
     if (!linesBySection[sec]) linesBySection[sec] = [];
     linesBySection[sec].push(line);
   }
 
-  const hasQtyRate = result.line_explanations.some(
+  const hasQtyRate = lineExplanations.some(
     (l) => l.qty != null || l.rate != null
   );
 
@@ -202,13 +226,13 @@ export function ResultsStep() {
     };
     const textLines: string[] = [];
     textLines.push("=== " + S.resultsSummaryTitle + " ===");
-    for (const card of result.summary_cards) {
+    for (const card of summaryCards) {
       textLines.push(`${card.label_he}: ${card.formatted_value ?? "---"}`);
     }
     textLines.push("");
-    if (result.flags.length > 0) {
-      textLines.push("=== " + S.resultsFlagsTitle + ` (${result.flags.length}) ===`);
-      for (const flag of result.flags) {
+    if (flags.length > 0) {
+      textLines.push("=== " + S.resultsFlagsTitle + ` (${flags.length}) ===`);
+      for (const flag of flags) {
         textLines.push(`[${sevLabel[flag.severity] ?? flag.severity}] ${flag.title_he}`);
         textLines.push(`  ${flag.explanation_he}`);
         if (flag.suggested_next_step) {
@@ -217,9 +241,9 @@ export function ResultsStep() {
       }
       textLines.push("");
     }
-    if (result.ok_items.length > 0) {
+    if (okItems.length > 0) {
       textLines.push("=== " + S.resultsOkTitle + " ===");
-      for (const item of result.ok_items) {
+      for (const item of okItems) {
         textLines.push(`\u2713 ${item.title_he}: ${item.explanation_he}`);
       }
     }
@@ -232,35 +256,37 @@ export function ResultsStep() {
   return (
     <div className="mx-auto max-w-3xl space-y-8" dir="rtl">
       {/* Summary cards */}
-      <section>
-        <h2 className="mb-3 text-lg font-semibold text-gray-800">{S.resultsSummaryTitle}</h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          {result.summary_cards.map((card) => (
-            <div
-              key={card.key}
-              className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className={`inline-block h-2.5 w-2.5 rounded-full ${
-                    STATUS_DOT[card.status] ?? "bg-gray-400"
-                  }`}
-                />
-                <span className="text-xs text-gray-500">{card.label_he}</span>
+      {summaryCards.length > 0 && (
+        <section>
+          <h2 className="mb-3 text-lg font-semibold text-gray-800">{S.resultsSummaryTitle}</h2>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {summaryCards.map((card, i) => (
+              <div
+                key={card.key ?? i}
+                className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`inline-block h-2.5 w-2.5 rounded-full ${
+                      STATUS_DOT[card.status] ?? "bg-gray-400"
+                    }`}
+                  />
+                  <span className="text-xs text-gray-500">{card.label_he}</span>
+                </div>
+                <p className="mt-1 text-lg font-bold text-gray-900">
+                  {card.formatted_value ?? formatNIS(card.value)}
+                </p>
               </div>
-              <p className="mt-1 text-lg font-bold text-gray-900">
-                {card.formatted_value ?? formatNIS(card.value)}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Flags */}
-      {result.flags.length > 0 && (
+      {flags.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-semibold text-gray-800">
-            {S.resultsFlagsTitle} ({result.flags.length})
+            {S.resultsFlagsTitle} ({flags.length})
           </h2>
           <div className="space-y-3">
             {SEVERITY_ORDER.flatMap((sev) =>
@@ -273,11 +299,11 @@ export function ResultsStep() {
       )}
 
       {/* OK items */}
-      {result.ok_items.length > 0 && (
+      {okItems.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-semibold text-gray-800">{S.resultsOkTitle}</h2>
           <div className="space-y-2">
-            {result.ok_items.map((item, i) => (
+            {okItems.map((item, i) => (
               <div
                 key={i}
                 className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-3"
@@ -296,7 +322,7 @@ export function ResultsStep() {
       )}
 
       {/* Line explanations — sectioned */}
-      {result.line_explanations.length > 0 && (
+      {lineExplanations.length > 0 && (
         <section>
           <h2 className="mb-3 text-lg font-semibold text-gray-800">
             {S.resultsLinesTitle}
@@ -313,11 +339,13 @@ export function ResultsStep() {
       )}
 
       {/* Disclaimer */}
-      <section className="rounded-xl border border-gray-300 bg-gray-100 p-4">
-        <p className="text-xs leading-relaxed text-gray-600">
-          {result.disclaimer_he}
-        </p>
-      </section>
+      {result.disclaimer_he && (
+        <section className="rounded-xl border border-gray-300 bg-gray-100 p-4">
+          <p className="text-xs leading-relaxed text-gray-600">
+            {result.disclaimer_he}
+          </p>
+        </section>
+      )}
 
       {/* Action buttons */}
       <div className="flex flex-wrap justify-center gap-3 pb-8">
